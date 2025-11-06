@@ -298,7 +298,7 @@ elif st.session_state.step == 2 and st.session_state.authed:
         st.success("テンプレートを読み込みました。")
 
     # ★ 所属入力欄
-    aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービス など）", value=st.session_state.affiliation)
+    aff = st.text_input("所属", value=st.session_state.affiliation)
     st.session_state.affiliation = aff
         # ▼ 処理修理後（1行入力）
     processing_after = st.text_input("処理修理後（任意）")
