@@ -15,6 +15,9 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Dict, Optional, Tuple, List
+from datetime import datetime, timedelta, timezone
+JST = timezone(timedelta(hours=9))
+
 
 import streamlit as st
 from openpyxl import load_workbook
@@ -192,6 +195,12 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     if data.get("通報者"): ws["C14"] = data["通報者"]
     if data.get("対応者"): ws["L37"] = data["対応者"]
     if data.get("所属"): ws["C37"] = data["所属"]  # ★所属 追加（C37）
+        # --- 現在日付をB5/D5/F5へ書き込み（JST） ---
+    now = datetime.now(JST)
+    ws["B5"] = now.year
+    ws["D5"] = now.month
+    ws["F5"] = now.day
+
 
     # --- 日付・時刻（分割入力） ---
     def write_dt_block(base_row: int, src_key: str):
