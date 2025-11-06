@@ -381,6 +381,11 @@ elif st.session_state.step == 3 and st.session_state.authed:
         except Exception as e:
             st.error(f"テンプレートへの書き込みでエラーが発生しました: {e}")
 
+                # ▼ Step2に戻るボタン
+        if st.button("Step2に戻る", use_container_width=True):
+            st.session_state.step = 2
+            st.rerun()
+
         if st.button("最初に戻る", use_container_width=True):
             st.session_state.step = 1
             st.session_state.extracted = None
