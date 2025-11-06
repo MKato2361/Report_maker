@@ -194,6 +194,10 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     if data.get("受信内容"): ws["C15"] = data["受信内容"]
     if data.get("通報者"): ws["C14"] = data["通報者"]
     if data.get("対応者"): ws["L37"] = data["対応者"]
+        # --- 処理修理後の書込み（C35） ---
+    pa = st.session_state.get("processing_after")
+    if pa:
+        ws["C35"] = pa
     if data.get("所属"): ws["C37"] = data["所属"]  # ★所属 追加（C37）
         # --- 現在日付をB5/D5/F5へ書き込み（JST） ---
     now = datetime.now(JST)
@@ -296,6 +300,11 @@ elif st.session_state.step == 2 and st.session_state.authed:
     # ★ 所属入力欄
     aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービス など）", value=st.session_state.affiliation)
     st.session_state.affiliation = aff
+        # ▼ 処理修理後（1行入力）
+    processing_after = st.text_input("処理修理後（任意）")
+    if processing_after:
+        st.session_state["processing_after"] = processing_after
+
 
     text = st.text_area(
         "故障完了メール（本文）を貼り付け",
@@ -360,6 +369,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
         with st.expander("その他", expanded=False):
             st.markdown(f"- 所属：{data.get('所属') or ''}")  # ★所属 表示
             st.markdown(f"- 対応者：{data.get('対応者') or ''}")
+            st.markdown(f"- 処理修理後：{st.session_state.get('processing_after', '')}")
             st.markdown(f"- 送信者：{data.get('送信者') or ''}")
             st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
             st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
