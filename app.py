@@ -2,12 +2,13 @@
 # ------------------------------------------------------------
 # 故障メール → 正規表現抽出 → 既存テンプレ(.xlsx)へ書込み → ダウンロード
 # 3ステップUI / パスコード認証 / 編集不可 / 折りたたみ表示（時系列）
-# 仕様はユーザー確定内容を反映
+# 仕様反映：
 #   - 曜日：日本語（例：月）
 #   - 複数行：最大5行。超過は「…」付与
 #   - 通報者：原文そのまま（様/電話番号含む）
 #   - ファイル名：管理番号_物件名_日付（yyyymmdd）
 #   - 時刻セル分割：年・月・日・曜・時・分（個別セル）
+#   - rerun は st.rerun() を使用
 # ------------------------------------------------------------
 import io
 import re
@@ -19,10 +20,11 @@ import streamlit as st
 from openpyxl import load_workbook
 
 APP_TITLE = "故障報告メール → Excel自動生成"
-PASSCODE_DEFAULT = "1357"  # st.secrets["APP_PASSCODE"] で上書き推奨
+PASSCODE_DEFAULT = "1357"  # 公開運用時は .streamlit/secrets.toml の APP_PASSCODE を推奨
 PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
 
-SHEET_NAME = "緊急出動報告書（リンク付き）"  # テンプレのシート名（RTFに準拠）
+# テンプレートのシート名（ユーザー共有仕様に準拠）
+SHEET_NAME = "緊急出動報告書（リンク付き）"
 
 # ====== ユーティリティ ======
 WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
@@ -40,6 +42,9 @@ def _search_one(pattern: str, text: str, flags=0) -> Optional[str]:
     return m.group(1).strip() if m else None
 
 def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optional[str]:
+    """
+    ラベル key の位置から、次のいずれかのラベル直前までを抽出（複数行対応）
+    """
     lab = labels[key]
     others = [v for k, v in labels.items() if k != key]
     boundary = "|".join([f"(?:{v})" for v in others]) if others else r"$"
@@ -66,7 +71,8 @@ def _split_dt_components(dt: Optional[datetime]) -> Tuple[Optional[int], Optiona
     y = dt.year
     m = dt.month
     d = dt.day
-    wd = WEEKDAYS_JA[(dt.weekday() + 1) % 7]  # Python: Mon=0。日本の並びに合わせてもOKだが/月火水…に対応
+    # Python weekday(): Mon=0..Sun=6 → 日本語配列にそのまま適用
+    wd = WEEKDAYS_JA[dt.weekday()]
     hh = dt.hour
     mm = dt.minute
     return y, m, d, wd, hh, mm
@@ -91,15 +97,17 @@ def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip() != ""]
     if len(lines) <= max_lines:
         return lines
-    # 超過時は末尾に「…」
     kept = lines[: max_lines - 1] + [lines[max_lines - 1] + "…"]
     return kept
 
-# ====== 正規表現 抽出（サンプル仕様に準拠） ======
+# ====== 正規表現 抽出 ======
 def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
+    """
+    共有サンプルフォーマットに準拠して抽出
+    """
     t = normalize_text(raw_text)
 
-    # 件名（冗長抽出）
+    # 件名の冗長抽出
     subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
     subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
 
@@ -152,11 +160,14 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着完了登録URL": None,
     }
 
+    # 単一行
     for k, pat in single_line.items():
         out[k] = _search_one(pat, t, flags=re.IGNORECASE | re.MULTILINE)
+    # 件名に管理番号がある場合の補完
     if not out["管理番号"] and subject_manageno:
         out["管理番号"] = subject_manageno
 
+    # 複数行
     for k in multiline_labels:
         out[k] = _search_span_between(multiline_labels, k, t)
 
@@ -168,64 +179,34 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
 # ====== テンプレ書き込み ======
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
     """
-    .xlsx テンプレ（.xlsbを人手で保存し直したもの）に対し、
-    指定セルへ値を書き込んで新規 .xlsx を返す
+    .xlsx テンプレ（.xlsb を Excel で保存し直したもの）に値を書き込んで返す
     """
     wb = load_workbook(io.BytesIO(template_bytes))
-    if SHEET_NAME not in wb.sheetnames:
-        # シート名違いを許容するため、最初のシートを使う（保険）
-        ws = wb.active
-    else:
-        ws = wb[SHEET_NAME]
+    ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
 
-    # --- 簡単項目 ---
-    # C12: 管理番号
-    if data.get("管理番号"):
-        ws["C12"] = data["管理番号"]
-
-    # 物件名（RTFではセル未指定。通常は書くが、未指定のためスキップ）
-    # 住所（未指定のためスキップ）
-    # 窓口会社（未指定のためスキップ）
-
-    # J12: メーカー
-    if data.get("メーカー"):
-        ws["J12"] = data["メーカー"]
-
-    # M12: 制御方式
-    if data.get("制御方式"):
-        ws["M12"] = data["制御方式"]
-
-    # 契約種別（RTFではセル未指定。必要なら後で割付）
-
-    # C15: 通報内容
-    if data.get("受信内容"):
-        ws["C15"] = data["受信内容"]
-
-    # C14: 通報者（原文そのまま）
-    if data.get("通報者"):
-        ws["C14"] = data["通報者"]
-
-    # L37: 対応者（作業者） フルネーム
-    if data.get("対応者"):
-        ws["L37"] = data["対応者"]
-
-    # 受付担当者（送信者）・URLなど（RTFにセル指定なし→必要なら追記可能）
+    # --- 単項目 ---
+    if data.get("管理番号"): ws["C12"] = data["管理番号"]
+    if data.get("メーカー"): ws["J12"] = data["メーカー"]
+    if data.get("制御方式"): ws["M12"] = data["制御方式"]
+    if data.get("受信内容"): ws["C15"] = data["受信内容"]
+    if data.get("通報者"): ws["C14"] = data["通報者"]
+    if data.get("対応者"): ws["L37"] = data["対応者"]
 
     # --- 日付・時刻（分割入力） ---
-    def write_dt_block(base: str, src_key: str):
+    def write_dt_block(base_row: int, src_key: str):
         """
-        base: "13" / "19" / "36" など行番号の基点（通報=13, 現着=19, 完了=36）
+        base_row: 13(受信), 19(現着), 36(完了)
         C(年) F(月) H(日) J(曜) M(時) O(分)
         """
         dt = _try_parse_datetime(data.get(src_key))
         y, m, d, wd, hh, mm = _split_dt_components(dt)
         cellmap = {
-            "Y": f"C{base}",
-            "Mo": f"F{base}",
-            "D": f"H{base}",
-            "W": f"J{base}",
-            "H": f"M{base}",
-            "Min": f"O{base}",
+            "Y": f"C{base_row}",
+            "Mo": f"F{base_row}",
+            "D": f"H{base_row}",
+            "W": f"J{base_row}",
+            "H": f"M{base_row}",
+            "Min": f"O{base_row}",
         }
         if y is not None: ws[cellmap["Y"]] = y
         if m is not None: ws[cellmap["Mo"]] = m
@@ -234,30 +215,22 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
         if hh is not None: ws[cellmap["H"]] = f"{hh:02d}"
         if mm is not None: ws[cellmap["Min"]] = f"{mm:02d}"
 
-    # 通報（受信時刻）：13行
-    write_dt_block("13", "受信時刻")
-    # 現着：19行
-    write_dt_block("19", "現着時刻")
-    # 完了：36行
-    write_dt_block("36", "完了時刻")
+    write_dt_block(13, "受信時刻")   # 通報時刻（受信）
+    write_dt_block(19, "現着時刻")   # 現着
+    write_dt_block(36, "完了時刻")   # 完了
 
     # --- 複数行（最大5行、超過は「…」） ---
     def fill_multiline(col_letter: str, start_row: int, text: Optional[str], max_lines: int = 5):
         lines = _split_lines(text, max_lines=max_lines)
-        # まず空クリア
-        for i in range(max_lines):
+        for i in range(max_lines):  # 先にクリア
             ws[f"{col_letter}{start_row + i}"] = ""
         for idx, line in enumerate(lines[:max_lines]):
             ws[f"{col_letter}{start_row + idx}"] = line
 
-    # 現着状況：C20~C24
-    fill_multiline("C", 20, data.get("現着状況"), max_lines=5)
-    # 原因：C25~C29
-    fill_multiline("C", 25, data.get("原因"), max_lines=5)
-    # 処置内容：C30~C34
-    fill_multiline("C", 30, data.get("処置内容"), max_lines=5)
+    fill_multiline("C", 20, data.get("現着状況"), max_lines=5)  # C20~C24
+    fill_multiline("C", 25, data.get("原因"), max_lines=5)      # C25~C29
+    fill_multiline("C", 30, data.get("処置内容"), max_lines=5)  # C30~C34
 
-    # 完成バイトへ
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
@@ -291,7 +264,7 @@ if st.session_state.step == 1:
         if pw == PASSCODE:
             st.session_state.authed = True
             st.session_state.step = 2
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("パスコードが違います。")
 
@@ -324,7 +297,7 @@ elif st.session_state.step == 2 and st.session_state.authed:
             else:
                 st.session_state.extracted = extract_fields(text)
                 st.session_state.step = 3
-                st.experimental_rerun()
+                st.rerun()
     with c2:
         if st.button("クリア", use_container_width=True):
             st.session_state.extracted = None
@@ -391,7 +364,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
             st.session_state.step = 1
             st.session_state.extracted = None
             st.session_state.template_xlsx_bytes = None
-            st.experimental_rerun()
+            st.rerun()
 else:
     st.warning("認証が必要です。Step 1に戻ります。")
     st.session_state.step = 1
