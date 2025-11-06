@@ -134,7 +134,10 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
+        "通報者": r"通報者\s*:",   # ← 境界として追加
+        "対応者": r"対応者\s*:", 
     }
+
 
     out = {
         "案件種別(件名)": subject_case,
