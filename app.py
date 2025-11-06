@@ -1,4 +1,4 @@
-# app.py
+# app.py (Part 1/2)
 # ------------------------------------------------------------
 # 故障メール → 正規表現抽出 → 既存テンプレ(.xlsx)へ書込み → ダウンロード
 # 3ステップUI / パスコード認証 / 編集不可 / 折りたたみ表示（時系列）
@@ -71,7 +71,6 @@ def _split_dt_components(dt: Optional[datetime]) -> Tuple[Optional[int], Optiona
     y = dt.year
     m = dt.month
     d = dt.day
-    # Python weekday(): Mon=0..Sun=6 → 日本語配列にそのまま適用
     wd = WEEKDAYS_JA[dt.weekday()]
     hh = dt.hour
     mm = dt.minute
@@ -107,7 +106,6 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     """
     t = normalize_text(raw_text)
 
-    # 件名の冗長抽出
     subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
     subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
 
@@ -120,7 +118,7 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "制御方式": r"制御方式\s*:\s*(.+)",
         "契約種別": r"契約種別\s*:\s*(.+)",
         "受信時刻": r"受信時刻\s*:\s*([0-9/\-:\s]+)",
-        "通報者": r"通報者\s*:\s*(.+)",  # 原文そのまま（様/電話番号含む）
+        "通報者": r"通報者\s*:\s*(.+)",
         "現着時刻": r"現着時刻\s*:\s*([0-9/\-:\s]+)",
         "完了時刻": r"完了時刻\s*:\s*([0-9/\-:\s]+)",
         "対応者": r"対応者\s*:\s*(.+)",
@@ -129,18 +127,18 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "受付URL": r"詳細はこちら\s*:\s*.*?(https?://\S+)",
         "現着完了登録URL": r"現着・完了登録はこちら\s*:\s*(https?://\S+)",
     }
+
     multiline_labels = {
         "受信内容": r"受信内容\s*:",
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
-        "通報者": r"通報者\s*:",   # ← 境界として追加
+        "通報者": r"通報者\s*:",
         "対応者": r"対応者\s*:",
         "送信者": r"送信者\s*:",
         "現着時刻": r"現着時刻\s*:",
         "完了時刻": r"完了時刻\s*:",
     }
-
 
     out = {
         "案件種別(件名)": subject_case,
@@ -166,22 +164,18 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着完了登録URL": None,
     }
 
-    # 単一行
     for k, pat in single_line.items():
         out[k] = _search_one(pat, t, flags=re.IGNORECASE | re.MULTILINE)
-    # 件名に管理番号がある場合の補完
+
     if not out["管理番号"] and subject_manageno:
         out["管理番号"] = subject_manageno
 
-    # 複数行
     for k in multiline_labels:
         out[k] = _search_span_between(multiline_labels, k, t)
 
-    # 参考：作業時間（分）
     dur = minutes_between(out["現着時刻"], out["完了時刻"])
     out["作業時間_分"] = str(dur) if dur is not None and dur >= 0 else None
     return out
-
 # ====== テンプレ書き込み ======
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
     """
@@ -197,6 +191,7 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     if data.get("受信内容"): ws["C15"] = data["受信内容"]
     if data.get("通報者"): ws["C14"] = data["通報者"]
     if data.get("対応者"): ws["L37"] = data["対応者"]
+    if data.get("所属"): ws["C37"] = data["所属"]  # ★所属 追加（C37）
 
     # --- 日付・時刻（分割入力） ---
     def write_dt_block(base_row: int, src_key: str):
@@ -261,6 +256,8 @@ if "extracted" not in st.session_state:
     st.session_state.extracted = None
 if "template_xlsx_bytes" not in st.session_state:
     st.session_state.template_xlsx_bytes = None
+if "affiliation" not in st.session_state:      # ★所属 初期化
+    st.session_state.affiliation = ""
 
 # Step 1: 認証
 if st.session_state.step == 1:
@@ -274,9 +271,9 @@ if st.session_state.step == 1:
         else:
             st.error("パスコードが違います。")
 
-# Step 2: 本文貼付 + テンプレアップロード
+# Step 2: 本文貼付 + テンプレアップロード + 所属（NEW）
 elif st.session_state.step == 2 and st.session_state.authed:
-    st.subheader("Step 2. メール本文の貼り付け / テンプレの指定")
+    st.subheader("Step 2. メール本文の貼り付け / テンプレの指定 / 所属")
 
     tmpl = st.file_uploader(
         "テンプレート（.xlsx）をアップロードしてください（※ .xlsb をExcelで一度 .xlsx 保存したもの）",
@@ -287,10 +284,14 @@ elif st.session_state.step == 2 and st.session_state.authed:
         st.session_state.template_xlsx_bytes = tmpl.read()
         st.success("テンプレートを読み込みました。")
 
+    # ★ 所属入力欄
+    aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービス など）", value=st.session_state.affiliation)
+    st.session_state.affiliation = aff
+
     text = st.text_area(
-        "SoftBankメール（件名〜本文）を貼り付け",
+        "故障完了メール（本文）を貼り付け",
         height=240,
-        placeholder="例：\n件名: 【故障完了】 HK1-234・ABCビル\n管理番号：HK1-234\n物件名：ABCビル\n住所：北海道札幌市中央区南10条西\n…"
+        placeholder="例：\n件名: 【故障完了】 HK1-234・ABCビル\n管理番号：HK1-234\n物件名：ABCビル\n住所：北海道札幌市中央区\n…"
     )
 
     c1, c2 = st.columns(2)
@@ -302,12 +303,16 @@ elif st.session_state.step == 2 and st.session_state.authed:
                 st.warning("テンプレート（.xlsx）が未指定です。まずはアップロードしてください。")
             else:
                 st.session_state.extracted = extract_fields(text)
+                # ★ Step3 へ渡す前に所属もデータとして保持する
+                st.session_state.extracted["所属"] = st.session_state.affiliation
                 st.session_state.step = 3
                 st.rerun()
+
     with c2:
         if st.button("クリア", use_container_width=True):
             st.session_state.extracted = None
             st.session_state.template_xlsx_bytes = None
+            st.session_state.affiliation = ""
 
 # Step 3: 抽出確認 → 生成
 elif st.session_state.step == 3 and st.session_state.authed:
@@ -344,6 +349,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
             st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
 
         with st.expander("その他", expanded=False):
+            st.markdown(f"- 所属：{data.get('所属') or ''}")  # ★所属 表示
             st.markdown(f"- 対応者：{data.get('対応者') or ''}")
             st.markdown(f"- 送信者：{data.get('送信者') or ''}")
             st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
@@ -352,7 +358,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
             st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
 
         st.divider()
-        # 生成
+
         try:
             xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
             fname = build_filename(data)
@@ -370,7 +376,9 @@ elif st.session_state.step == 3 and st.session_state.authed:
             st.session_state.step = 1
             st.session_state.extracted = None
             st.session_state.template_xlsx_bytes = None
+            st.session_state.affiliation = ""
             st.rerun()
+
 else:
     st.warning("認証が必要です。Step 1に戻ります。")
     st.session_state.step = 1
