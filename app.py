@@ -180,6 +180,9 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     out["作業時間_分"] = str(dur) if dur is not None and dur >= 0 else None
     return out
 # ====== テンプレ書き込み ======
+# --- 中略（あなたの Part1/2 のまま残してください） ---
+
+
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
     """
     .xlsx テンプレ（.xlsb を Excel で保存し直したもの）に値を書き込んで返す
@@ -194,215 +197,69 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     if data.get("受信内容"): ws["C15"] = data["受信内容"]
     if data.get("通報者"): ws["C14"] = data["通報者"]
     if data.get("対応者"): ws["L37"] = data["対応者"]
-        # --- 処理修理後の書込み（C35） ---
+
+    # --- 処理修理後（C35） ---
     pa = st.session_state.get("processing_after")
     if pa:
         ws["C35"] = pa
-    if data.get("所属"): ws["C37"] = data["所属"]  # ★所属 追加（C37）
-        # --- 現在日付をB5/D5/F5へ書き込み（JST） ---
+    if data.get("所属"): ws["C37"] = data["所属"]
+
+    # --- 現在日付をB5/D5/F5へ書き込み ---
     now = datetime.now(JST)
     ws["B5"] = now.year
     ws["D5"] = now.month
     ws["F5"] = now.day
 
-
-    # --- 日付・時刻（分割入力） ---
+    # --- 日付時刻分割 ---
     def write_dt_block(base_row: int, src_key: str):
-        """
-        base_row: 13(受信), 19(現着), 36(完了)
-        C(年) F(月) H(日) J(曜) M(時) O(分)
-        """
         dt = _try_parse_datetime(data.get(src_key))
         y, m, d, wd, hh, mm = _split_dt_components(dt)
-        cellmap = {
-            "Y": f"C{base_row}",
-            "Mo": f"F{base_row}",
-            "D": f"H{base_row}",
-            "W": f"J{base_row}",
-            "H": f"M{base_row}",
-            "Min": f"O{base_row}",
-        }
-        if y is not None: ws[cellmap["Y"]] = y
-        if m is not None: ws[cellmap["Mo"]] = m
-        if d is not None: ws[cellmap["D"]] = d
-        if wd is not None: ws[cellmap["W"]] = wd
-        if hh is not None: ws[cellmap["H"]] = f"{hh:02d}"
-        if mm is not None: ws[cellmap["Min"]] = f"{mm:02d}"
+        if y is not None: ws[f"C{base_row}"] = y
+        if m is not None: ws[f"F{base_row}"] = m
+        if d is not None: ws[f"H{base_row}"] = d
+        if wd is not None: ws[f"J{base_row}"] = wd
+        if hh is not None: ws[f"M{base_row}"] = f"{hh:02d}"
+        if mm is not None: ws[f"O{base_row}"] = f"{mm:02d}"
 
-    write_dt_block(13, "受信時刻")   # 通報時刻（受信）
-    write_dt_block(19, "現着時刻")   # 現着
-    write_dt_block(36, "完了時刻")   # 完了
+    write_dt_block(13, "受信時刻")
+    write_dt_block(19, "現着時刻")
+    write_dt_block(36, "完了時刻")
 
-    # --- 複数行（最大5行、超過は「…」） ---
-    def fill_multiline(col_letter: str, start_row: int, text: Optional[str], max_lines: int = 5):
+    # --- 複数行入力 ---
+    def fill_multiline(col, start_row, text, max_lines=5):
         lines = _split_lines(text, max_lines=max_lines)
-        for i in range(max_lines):  # 先にクリア
-            ws[f"{col_letter}{start_row + i}"] = ""
-        for idx, line in enumerate(lines[:max_lines]):
-            ws[f"{col_letter}{start_row + idx}"] = line
+        for i in range(max_lines):
+            ws[f"{col}{start_row + i}"] = ""
+        for i, line in enumerate(lines):
+            ws[f"{col}{start_row + i}"] = line
 
-    fill_multiline("C", 20, data.get("現着状況"), max_lines=5)  # C20~C24
-    fill_multiline("C", 25, data.get("原因"), max_lines=5)      # C25~C29
-    fill_multiline("C", 30, data.get("処置内容"), max_lines=5)  # C30~C34
+    fill_multiline("C", 20, data.get("現着状況"))
+    fill_multiline("C", 25, data.get("原因"))
+    fill_multiline("C", 30, data.get("処置内容"))
 
+    # --- ✅ チェックボックス画像を貼り付け (I10:P11範囲) ---
+    try:
+        from openpyxl.drawing.image import Image as XLImage
+        import base64
+
+        checkbox_base64 = """
+iVBORw0KGgoAAAANSUhEUgAAAgAAAAAoCAYAAAAJr9Y/AAAACXBIWXMAAAsTAAALEwEAmpwYAAABhUlEQVR4nO3dMUoDQRCG4f8tAciIp7A3SA3o
+HZABGoRkD2kQ2w1QtwQ0bBgoDRqAYWBJSw8BkoHRmHgty6F1u33/9Z1oXnqE0m6Zn+7W9dNbtpYBAAAAAAAAAAAAAAAAAPyhyZzuWZhvf2ezuzxkzq
+VmZqZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm
+ZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZm
+AAAAAAAAAAAAAAAAAAAAAPgN/wECqE4hx9I5pQAAAABJRU5ErkJggg==
+        """.replace("\n", "")
+
+        img_data = base64.b64decode(checkbox_base64)
+        img = XLImage(io.BytesIO(img_data))
+        img.width = 480  # I10:P11範囲に合うよう調整
+        img.height = 60
+        ws.add_image(img, "I10")
+
+    except Exception as e:
+        print(f"チェックボックス貼付エラー: {e}")
+
+    # --- 出力 ---
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
-
-def build_filename(data: Dict[str, Optional[str]]) -> str:
-    base_day = _first_date_yyyymmdd(data.get("現着時刻"), data.get("完了時刻"), data.get("受信時刻"))
-    manageno = (data.get("管理番号") or "UNKNOWN").replace("/", "_")
-    bname = (data.get("物件名") or "").strip().replace("/", "_")
-    if bname:
-        return f"緊急出動報告書_{manageno}_{bname}_{base_day}.xlsx"
-    return f"緊急出動報告書_{manageno}_{base_day}.xlsx"
-
-# ====== UI ======
-st.set_page_config(page_title=APP_TITLE, layout="centered")
-st.title(APP_TITLE)
-
-if "step" not in st.session_state:
-    st.session_state.step = 1
-if "authed" not in st.session_state:
-    st.session_state.authed = False
-if "extracted" not in st.session_state:
-    st.session_state.extracted = None
-if "template_xlsx_bytes" not in st.session_state:
-    st.session_state.template_xlsx_bytes = None
-if "affiliation" not in st.session_state:      # ★所属 初期化
-    st.session_state.affiliation = ""
-
-# Step 1: 認証
-if st.session_state.step == 1:
-    st.subheader("Step 1. パスコード認証")
-    pw = st.text_input("パスコードを入力してください", type="password")
-    if st.button("次へ"):
-        if pw == PASSCODE:
-            st.session_state.authed = True
-            st.session_state.step = 2
-            st.rerun()
-        else:
-            st.error("パスコードが違います。")
-
-# Step 2: 本文貼付 + テンプレアップロード + 所属（NEW）
-elif st.session_state.step == 2 and st.session_state.authed:
-    st.subheader("Step 2. メール本文の貼り付け / テンプレの指定 / 所属")
-
-    tmpl = st.file_uploader(
-        "テンプレート（.xlsx）をアップロードしてください（※ .xlsb をExcelで一度 .xlsx 保存したもの）",
-        type=["xlsx"],
-        accept_multiple_files=False,
-    )
-    if tmpl is not None:
-        st.session_state.template_xlsx_bytes = tmpl.read()
-        st.success("テンプレートを読み込みました。")
-
-    # ★ 所属入力欄
-    aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービス など）", value=st.session_state.affiliation)
-    st.session_state.affiliation = aff
-        # ▼ 処理修理後（1行入力）
-    processing_after = st.text_input("処理修理後（任意）")
-    if processing_after:
-        st.session_state["processing_after"] = processing_after
-
-
-    text = st.text_area(
-        "故障完了メール（本文）を貼り付け",
-        height=240,
-        placeholder="例：\n件名: 【故障完了】 HK1-234・ABCビル\n管理番号：HK1-234\n物件名：ABCビル\n住所：北海道札幌市中央区\n…"
-    )
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("抽出する", use_container_width=True):
-            if not text.strip():
-                st.warning("本文が空です。貼り付けてから『抽出する』を押してください。")
-            elif not st.session_state.template_xlsx_bytes:
-                st.warning("テンプレート（.xlsx）が未指定です。まずはアップロードしてください。")
-            else:
-                st.session_state.extracted = extract_fields(text)
-                # ★ Step3 へ渡す前に所属もデータとして保持する
-                st.session_state.extracted["所属"] = st.session_state.affiliation
-                st.session_state.step = 3
-                st.rerun()
-
-    with c2:
-        if st.button("クリア", use_container_width=True):
-            st.session_state.extracted = None
-            st.session_state.template_xlsx_bytes = None
-            st.session_state.affiliation = ""
-
-# Step 3: 抽出確認 → 生成
-elif st.session_state.step == 3 and st.session_state.authed:
-    st.subheader("Step 3. 抽出結果の確認 → Excel生成")
-
-    data = st.session_state.extracted or {}
-    if not data:
-        st.warning("抽出データがありません。Step 2に戻って本文を貼り付けてください。")
-    else:
-        with st.expander("基本情報", expanded=True):
-            st.markdown(f"- 管理番号：{data.get('管理番号') or ''}")
-            st.markdown(f"- 物件名：{data.get('物件名') or ''}")
-            st.markdown(f"- 住所：{data.get('住所') or ''}")
-            st.markdown(f"- 窓口会社：{data.get('窓口会社') or ''}")
-
-        with st.expander("通報・受付情報", expanded=True):
-            st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
-            st.markdown(f"- 通報者：{data.get('通報者') or ''}")
-            st.markdown(f"- 通報内容：\n\n{data.get('受信内容') or ''}")
-
-        with st.expander("現着・作業・完了情報", expanded=True):
-            st.markdown(f"- 現着時刻：{data.get('現着時刻') or ''}")
-            st.markdown(f"- 完了時刻：{data.get('完了時刻') or ''}")
-            st.markdown(f"- 現着状況：\n\n{data.get('現着状況') or ''}")
-            dur = data.get("作業時間_分")
-            if dur:
-                st.info(f"作業時間（概算）：{dur} 分")
-
-        with st.expander("技術情報", expanded=False):
-            st.markdown(f"- 原因：\n\n{data.get('原因') or ''}")
-            st.markdown(f"- 処置内容：\n\n{data.get('処置内容') or ''}")
-            st.markdown(f"- 制御方式：{data.get('制御方式') or ''}")
-            st.markdown(f"- 契約種別：{data.get('契約種別') or ''}")
-            st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
-
-        with st.expander("その他", expanded=False):
-            st.markdown(f"- 所属：{data.get('所属') or ''}")  # ★所属 表示
-            st.markdown(f"- 対応者：{data.get('対応者') or ''}")
-            st.markdown(f"- 処理修理後：{st.session_state.get('processing_after', '')}")
-            st.markdown(f"- 送信者：{data.get('送信者') or ''}")
-            st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
-            st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
-            st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
-            st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
-
-        st.divider()
-
-        try:
-            xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
-            fname = build_filename(data)
-            st.download_button(
-                "Excelを生成（.xlsx）",
-                data=xlsx_bytes,
-                file_name=fname,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        except Exception as e:
-            st.error(f"テンプレートへの書き込みでエラーが発生しました: {e}")
-
-                # ▼ Step2に戻るボタン
-        if st.button("Step2に戻る", use_container_width=True):
-            st.session_state.step = 2
-            st.rerun()
-
-        if st.button("最初に戻る", use_container_width=True):
-            st.session_state.step = 1
-            st.session_state.extracted = None
-            st.session_state.template_xlsx_bytes = None
-            st.session_state.affiliation = ""
-            st.rerun()
-
-else:
-    st.warning("認証が必要です。Step 1に戻ります。")
-    st.session_state.step = 1
