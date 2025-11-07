@@ -28,6 +28,48 @@ PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
 SHEET_NAME = "緊急出動報告書（リンク付き）"
 WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
 
+# -------------------------------------------------------------
+# ✏️ 編集フィールド共通関数（どのStepでも利用可能）
+# -------------------------------------------------------------
+def editable_field(label, key, max_lines=1):
+    """共通：左アイコン付きの編集UI"""
+    data = st.session_state.extracted
+    edit_key = f"edit_{key}"
+    if edit_key not in st.session_state:
+        st.session_state[edit_key] = False
+
+    # 通常表示モード
+    if not st.session_state[edit_key]:
+        value = data.get(key) or ""
+        lines = value.split("\n") if max_lines > 1 else [value]
+        display_text = "<br>".join(lines)
+        cols = st.columns([0.07, 0.93])
+        with cols[0]:
+            if st.button("✏️", key=f"btn_{key}", help=f"{label}を編集"):
+                st.session_state[edit_key] = True
+                st.rerun()
+        with cols[1]:
+            st.markdown(f"**{label}：**<br>{display_text}", unsafe_allow_html=True)
+
+    # 編集モード
+    else:
+        st.markdown(f"✏️ **{label} 編集中**")
+        value = data.get(key) or ""
+        if max_lines == 1:
+            new_val = st.text_input(f"{label}を入力", value=value, key=f"in_{key}")
+        else:
+            new_val = st.text_area(f"{label}を入力", value=value, height=max_lines * 25, key=f"ta_{key}")
+        c1, c2 = st.columns([0.3, 0.7])
+        with c1:
+            if st.button("💾 保存", key=f"save_{key}"):
+                st.session_state.extracted[key] = new_val
+                st.session_state[edit_key] = False
+                st.rerun()
+        with c2:
+            if st.button("❌ キャンセル", key=f"cancel_{key}"):
+                st.session_state[edit_key] = False
+                st.rerun()
+
 # ====== テキスト整形・抽出ユーティリティ ======
 def normalize_text(text: str) -> str:
     if not text:
@@ -158,7 +200,6 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     wb = load_workbook(io.BytesIO(template_bytes), keep_vba=True)
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
 
-    # --- 基本情報 ---
     if data.get("管理番号"): ws["C12"] = data["管理番号"]
     if data.get("メーカー"): ws["J12"] = data["メーカー"]
     if data.get("制御方式"): ws["M12"] = data["制御方式"]
@@ -172,7 +213,6 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     now = datetime.now(JST)
     ws["B5"], ws["D5"], ws["F5"] = now.year, now.month, now.day
 
-    # --- 日付・時刻ブロック ---
     def write_dt_block(base_row: int, src_key: str):
         dt = _try_parse_datetime(data.get(src_key))
         y, m, d, wd, hh, mm = _split_dt_components(dt)
@@ -189,7 +229,6 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     write_dt_block(19, "現着時刻")
     write_dt_block(36, "完了時刻")
 
-    # --- 複数行ブロック ---
     def fill_multiline(col_letter: str, start_row: int, text: Optional[str], max_lines: int = 5):
         lines = _split_lines(text, max_lines=max_lines)
         for i in range(max_lines):
@@ -200,18 +239,6 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     fill_multiline("C", 20, data.get("現着状況"))
     fill_multiline("C", 25, data.get("原因"))
     fill_multiline("C", 30, data.get("処置内容"))
-
-    # --- チェックボックス画像貼付 ---
-#    img_path = "check.png"
-#    if os.path.exists(img_path):
-#        try:
-#            img = XLImage(img_path)
-#            img.anchor = "I10"
-#            img.width = 400
-#            img.height = 40
-#            ws.add_image(img)
-#        except Exception as e:
-#            print("チェックボックス画像貼付中にエラー:", e)
 
     out = io.BytesIO()
     wb.save(out)
@@ -238,7 +265,7 @@ if "extracted" not in st.session_state:
 if "affiliation" not in st.session_state:
     st.session_state.affiliation = ""
 
-# Step 1: パスコード認証
+# Step1
 if st.session_state.step == 1:
     st.subheader("Step 1. パスコード認証")
     pw = st.text_input("パスコードを入力してください", type="password")
@@ -250,10 +277,9 @@ if st.session_state.step == 1:
         else:
             st.error("パスコードが違います。")
 
-# Step 2: メール本文＋テンプレ自動読み込み
+# Step2
 elif st.session_state.step == 2 and st.session_state.authed:
     st.subheader("Step 2. メール本文の貼り付け / 所属")
-
     template_path = "template.xlsm"
     if os.path.exists(template_path):
         with open(template_path, "rb") as f:
@@ -265,6 +291,7 @@ elif st.session_state.step == 2 and st.session_state.authed:
 
     aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービスなど）", value=st.session_state.affiliation)
     st.session_state.affiliation = aff
+
     processing_after = st.text_input("処理修理後（任意）")
     if processing_after:
         st.session_state["processing_after"] = processing_after
@@ -286,72 +313,107 @@ elif st.session_state.step == 2 and st.session_state.authed:
             st.session_state.extracted = None
             st.session_state.affiliation = ""
 
-# Step 3: 出力
+
+
+# -------------------------------------------------------------
+# Step3: 抽出結果の確認・編集 → Excel生成
+# -------------------------------------------------------------
+    # Step2で入力した処理修理後を常に反映
 elif st.session_state.step == 3 and st.session_state.authed:
-    st.subheader("Step 3. 抽出結果の確認 → Excel生成")
+    st.subheader("Step 3. 抽出結果の確認・編集 → Excel生成")
+
+    # --- Step2の処理修理後を初回のみ反映 ---
+    if st.session_state.get("processing_after") and st.session_state.extracted is not None:
+        if not st.session_state.extracted.get("_processing_after_initialized"):
+            st.session_state.extracted["処理修理後"] = st.session_state["processing_after"]
+            st.session_state.extracted["_processing_after_initialized"] = True
+
     data = st.session_state.extracted or {}
-    if not data:
-        st.warning("抽出データがありません。")
-    else:
-        with st.expander("基本情報", expanded=True):
-            st.markdown(f"- 管理番号：{data.get('管理番号') or ''}")
-            st.markdown(f"- 物件名：{data.get('物件名') or ''}")
-            st.markdown(f"- 住所：{data.get('住所') or ''}")
-            st.markdown(f"- 窓口会社：{data.get('窓口会社') or ''}")
 
-        with st.expander("通報・受付情報", expanded=True):
-            st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
-            st.markdown(f"- 通報者：{data.get('通報者') or ''}")
-            st.markdown(f"- 受信内容：\n\n{data.get('受信内容') or ''}")
 
-        with st.expander("現着・作業・完了情報", expanded=True):
-            st.markdown(f"- 現着時刻：{data.get('現着時刻') or ''}")
-            st.markdown(f"- 完了時刻：{data.get('完了時刻') or ''}")
-            st.markdown(f"- 現着状況：\n\n{data.get('現着状況') or ''}")
-            dur = data.get("作業時間_分")
-            if dur:
-                st.info(f"作業時間（概算）：{dur} 分")
+    # -------------------------------------------------------------
+    # ① 基本情報（表示のみ）
+    # -------------------------------------------------------------
+    with st.expander("① 基本情報", expanded=True):
+        base_fields = ["管理番号", "物件名", "住所", "窓口会社"]
+        for key in base_fields:
+            val = data.get(key) or ""
+            st.markdown(f"**{key}：** {val}")
 
-        with st.expander("技術情報", expanded=False):
-            st.markdown(f"- 原因：\n\n{data.get('原因') or ''}")
-            st.markdown(f"- 処置内容：\n\n{data.get('処置内容') or ''}")
-            st.markdown(f"- 制御方式：{data.get('制御方式') or ''}")
-            st.markdown(f"- 契約種別：{data.get('契約種別') or ''}")
-            st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
+    # -------------------------------------------------------------
+    # ② 通報・受付情報
+    # -------------------------------------------------------------
+    with st.expander("② 通報・受付情報", expanded=True):
+        st.markdown(f"**受信時刻：** {data.get('受信時刻') or ''}")
+        editable_field("通報者", "通報者", 1)
+        editable_field("受信内容", "受信内容", 4)
 
-        with st.expander("その他", expanded=False):
-            st.markdown(f"- 所属：{data.get('所属') or ''}")
-            st.markdown(f"- 対応者：{data.get('対応者') or ''}")
-            st.markdown(f"- 処理修理後：{st.session_state.get('processing_after', '')}")
-            st.markdown(f"- 送信者：{data.get('送信者') or ''}")
-            st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
-            st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
-            st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
-            st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
+    # -------------------------------------------------------------
+    # ③ 現着・作業・完了情報
+    # -------------------------------------------------------------
+    with st.expander("③ 現着・作業・完了情報", expanded=True):
+        st.markdown(f"**現着時刻：** {data.get('現着時刻') or ''}")
+        st.markdown(f"**完了時刻：** {data.get('完了時刻') or ''}")
+        dur = data.get("作業時間_分")
+        if dur:
+            st.info(f"作業時間（概算）：{dur} 分")
+        editable_field("現着状況", "現着状況", 5)
+        editable_field("原因", "原因", 5)
+        editable_field("処置内容", "処置内容", 5)
+        editable_field("処理修理後（Step2入力値）", "処理修理後", 1)
 
-        st.divider()
-        try:
-            xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
-            fname = build_filename(data)
-            st.download_button(
-                "Excelを生成（.xlsm）",
-                data=xlsx_bytes,
-                file_name=fname,
-                mime="application/vnd.ms-excel.sheet.macroEnabled.12",
-                use_container_width=True,
-            )
-        except Exception as e:
-            st.error(f"テンプレート書き込み中にエラー: {e}")
+    # -------------------------------------------------------------
+    # ④ 技術情報
+    # -------------------------------------------------------------
+    with st.expander("④ 技術情報", expanded=False):
+        tech_fields = ["制御方式", "契約種別", "メーカー"]
+        for key in tech_fields:
+            val = data.get(key) or ""
+            st.markdown(f"**{key}：** {val}")
 
+    # -------------------------------------------------------------
+    # ⑤ その他情報
+    # -------------------------------------------------------------
+    with st.expander("⑤ その他情報", expanded=False):
+        other_fields = [
+            "所属", "対応者", "送信者",
+            "受付番号", "受付URL", "現着完了登録URL"
+        ]
+        for key in other_fields:
+            val = data.get(key) or ""
+            st.markdown(f"**{key}：** {val}")
+
+    st.divider()
+
+    # --- Excel出力 ---
+    try:
+        xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
+        fname = build_filename(data)
+        st.download_button(
+            "Excelを生成（.xlsm）",
+            data=xlsx_bytes,
+            file_name=fname,
+            mime="application/vnd.ms-excel.sheet.macroEnabled.12",
+            use_container_width=True,
+        )
+    except Exception as e:
+        st.error(f"テンプレート書き込み中にエラーが発生しました: {e}")
+
+    # --- 戻るボタン群 ---
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Step2に戻る", use_container_width=True):
             st.session_state.step = 2
             st.rerun()
+    with c2:
         if st.button("最初に戻る", use_container_width=True):
             st.session_state.step = 1
             st.session_state.extracted = None
             st.session_state.affiliation = ""
             st.rerun()
 
+
+# Step1以前（認証なし状態）
 else:
     st.warning("認証が必要です。Step1に戻ります。")
     st.session_state.step = 1
