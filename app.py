@@ -384,6 +384,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
             # 編集行
             render_editable_row("原因", "原因", multiline=True)
             render_editable_row("処置内容", "処置内容", multiline=True)
+            render_editable_row("処理修理後", "処理修理後", multiline=True, help_text="未入力の場合はStep2の値を出力時に使用します。")
 
         with st.expander("その他", expanded=False):
             st.markdown(f"- 所属：{data.get('所属') or ''}")
@@ -394,9 +395,6 @@ elif st.session_state.step == 3 and st.session_state.authed:
             st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
             st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
             st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
-
-            # 編集行
-            render_editable_row("処理修理後", "処理修理後", multiline=True, help_text="未入力の場合はStep2の値を出力時に使用します。")
 
         st.divider()
 
