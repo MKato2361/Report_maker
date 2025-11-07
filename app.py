@@ -213,6 +213,8 @@ elif st.session_state.step == 3 and st.session_state.authed:
                 st.button("キャンセル", key=f"cancel_{key}", on_click=lambda: st.session_state.update({_edit_key(key): False}), use_container_width=True)
             st.markdown("---")
     
+    
+    
     with st.expander("通報・受付情報", expanded=True):
         st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
         render_editable_row("通報者", "通報者")
@@ -234,7 +236,6 @@ elif st.session_state.step == 3 and st.session_state.authed:
         st.markdown(f"- 物件名：{data.get('物件名') or ''}")
         st.markdown(f"- 住所：{data.get('住所') or ''}")
         st.markdown(f"- 窓口会社：{data.get('窓口会社') or ''}")
-            
     with st.expander("技術情報", expanded=False):
         render_editable_row("原因", "原因", multiline=True)
         render_editable_row("処置内容", "処置内容", multiline=True)
