@@ -419,7 +419,7 @@ def render_editable_row(label: str, key: str, multiline: bool = False, help_text
             st.session_state.template_xlsx_bytes = None
             st.session_state.affiliation = ""
             st.rerun()
-
-else:
-    st.warning("認証が必要です。Step 1に戻ります。")
-    st.session_state.step = 1
+        
+        else:
+            st.warning("認証が必要です。Step 1に戻ります。")
+            st.session_state.step = 1
