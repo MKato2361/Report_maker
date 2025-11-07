@@ -181,56 +181,45 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
 
 # ====== テンプレ書き込み ======
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
-    """
-    .xlsm テンプレに値を書き込んで返す（VBA保持）
-    ※ 複数行項目はセル内改行（wrapText）で反映
-    """
     wb = load_workbook(io.BytesIO(template_bytes), keep_vba=True)
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
 
-    # --- 単項目 ---
-    if data.get("管理番号"): ws["C12"] = data["管理番号"]
-    if data.get("メーカー"): ws["J12"] = data["メーカー"]
-    if data.get("制御方式"): ws["M12"] = data["制御方式"]
-    if data.get("通報者"): ws["C14"] = data["通報者"]
-    if data.get("対応者"): ws["L37"] = data["対応者"]
-    if data.get("所属"): ws["C37"] = data["所属"]
+    def format_lines(text: Optional[str], max_lines: int) -> str:
+        """指定行数に合わせて空行を補完"""
+        if not text:
+            return "\n" * (max_lines - 1)
+        lines = [ln.strip() for ln in text.splitlines()]
+        while len(lines) < max_lines:
+            lines.append("")
+        return "\n".join(lines[:max_lines])
 
-    # 日付（現在日）
-    now = datetime.now(JST)
-    ws["B5"] = now.year
-    ws["D5"] = now.month
-    ws["F5"] = now.day
-
-    # --- 複数行セル書き込み（セル内改行保持） ---
-    def write_multiline(cell_ref: str, text: Optional[str]):
-        if text is None:
-            ws[cell_ref] = ""
-            return
-        s = text.replace("\r\n", "\n").replace("\r", "\n")
+    def write_multiline(cell_ref: str, text: Optional[str], max_lines: int):
+        s = format_lines(text, max_lines)
         ws[cell_ref] = s
         try:
             ws[cell_ref].alignment = ws[cell_ref].alignment.copy(wrapText=True)
         except Exception:
             pass
 
-    # 受信内容/現着状況/原因/処置内容/処理修理後 をセル1つに改行込みで出力
-    write_multiline("C15", data.get("受信内容"))
-    write_multiline("C20", data.get("現着状況"))
-    write_multiline("C25", data.get("原因"))
-    write_multiline("C30", data.get("処置内容"))
+    # --- 通報者／受信内容／現着状況／原因／処置内容／処理修理後 ---
+    ws["C14"] = format_lines(data.get("通報者"), 1)
+    write_multiline("C15", data.get("受信内容"), 4)
+    write_multiline("C20", data.get("現着状況"), 5)
+    write_multiline("C25", data.get("原因"), 5)
+    write_multiline("C30", data.get("処置内容"), 5)
 
-    # 「処理修理後」は Step2で入力した processing_after を後方互換で使用
-    proc_after = data.get("処理修理後")
-    if not proc_after:
-        proc_after = st.session_state.get("processing_after")
-    write_multiline("C35", proc_after)
+    proc_after = data.get("処理修理後") or st.session_state.get("processing_after")
+    write_multiline("C35", proc_after, 1)
 
-    # --- （元の複数行行分割は要件に合わせて単セル化済み） ---
+    now = datetime.now(JST)
+    ws["B5"], ws["D5"], ws["F5"] = now.year, now.month, now.day
+    ws["C12"], ws["J12"], ws["M12"] = data.get("管理番号"), data.get("メーカー"), data.get("制御方式")
+    ws["L37"], ws["C37"] = data.get("対応者"), data.get("所属")
 
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+
 
 def build_filename(data: Dict[str, Optional[str]]) -> str:
     base_day = _first_date_yyyymmdd(data.get("現着時刻"), data.get("完了時刻"), data.get("受信時刻"))
