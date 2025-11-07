@@ -126,6 +126,11 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
+        "通報者": r"通報者\s*:",
+        "対応者": r"対応者\s*:",
+        "送信者": r"送信者\s*:",
+        "現着時刻": r"現着時刻\s*:",
+        "完了時刻": r"完了時刻\s*:",
     }
 
     out = {k: None for k in single_line.keys() | multiline_labels.keys()}
