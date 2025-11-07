@@ -302,9 +302,10 @@ elif st.session_state.step == 3 and st.session_state.authed:
             return f"__edit_mode__{key}"
             
     def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
-        #----
-        if _edit_key(key) not in st.session_state:
-            st.session_state[_edit_key(key)] = False
+    #"""表示→編集切替（・形式、編集時は置き換え）"""
+    if _edit_key(key) not in st.session_state:
+        st.session_state[_edit_key(key)] = False
+
     if not st.session_state[_edit_key(key)]:
         cols = st.columns([6, 1])
         with cols[0]:
@@ -330,6 +331,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
         with c2:
             st.button("キャンセル", key=f"cancel_{key}", on_click=lambda: st.session_state.update({_edit_key(key): False}), use_container_width=True)
         st.markdown("---")
+
 
 
         # ====== 元の「表示UI」はそのまま維持 ======
