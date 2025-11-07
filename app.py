@@ -301,7 +301,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
         def _edit_key(key: str) -> str:
             return f"__edit_mode__{key}"
             
-    def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
+        def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
     #"""表示→編集切替（・形式、編集時は置き換え）"""
     if _edit_key(key) not in st.session_state:
         st.session_state[_edit_key(key)] = False
