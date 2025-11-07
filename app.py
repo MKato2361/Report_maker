@@ -235,21 +235,18 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     fill_multiline("C", 25, data.get("原因"))
     fill_multiline("C", 30, data.get("処置内容"))
 
-    # === チェックボックス画像貼り付け (I10:P11) ===
+        # === チェックボックス画像貼り付け (I10:P11 範囲に1枚) ===
     img_path = "check.png"  # 添付画像ファイルを同フォルダに配置
     if os.path.exists(img_path):
         try:
-            cols = ["I", "J", "K", "L", "M", "N", "O", "P"]
-            rows = [10, 11]
-            for r in rows:
-                for c in cols:
-                    cell = f"{c}{r}"
-                    img = XLImage(img_path)
-                    img.width, img.height = 16, 16
-                    img.anchor = cell
-                    ws.add_image(img)
+            img = XLImage(img_path)
+            img.anchor = "I10"  # 左上基準セル
+            img.width = 400     # 横方向 約8列分
+            img.height = 40     # 縦方向 約2行分
+            ws.add_image(img)
         except Exception as e:
             print("チェックボックス画像貼付中にエラー:", e)
+
 
     out = io.BytesIO()
     wb.save(out)
