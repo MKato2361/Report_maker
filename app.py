@@ -212,8 +212,9 @@ elif st.session_state.step == 3 and st.session_state.authed:
             with c2:
                 st.button("キャンセル", key=f"cancel_{key}", on_click=lambda: st.session_state.update({_edit_key(key): False}), use_container_width=True)
             st.markdown("---")
-
+    
     with st.expander("通報・受付情報", expanded=True):
+        st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
         render_editable_row("通報者", "通報者")
         render_editable_row("受信内容", "受信内容", multiline=True)
     with st.expander("現着・作業・完了情報", expanded=True):
@@ -221,6 +222,35 @@ elif st.session_state.step == 3 and st.session_state.authed:
         render_editable_row("原因", "原因", multiline=True)
         render_editable_row("処置内容", "処置内容", multiline=True)
         render_editable_row("処理修理後", "処理修理後", multiline=True)
+        st.markdown(f"- 現着時刻：{data.get('現着時刻') or ''}")
+        st.markdown(f"- 完了時刻：{data.get('完了時刻') or ''}")
+        render_editable_row("現着状況", "現着状況", multiline=True)
+        dur = data.get("作業時間_分")
+        if dur:
+            st.info(f"作業時間（概算）：{dur} 分")
+
+    with st.expander("基本情報", expanded=True):
+        st.markdown(f"- 管理番号：{data.get('管理番号') or ''}")
+        st.markdown(f"- 物件名：{data.get('物件名') or ''}")
+        st.markdown(f"- 住所：{data.get('住所') or ''}")
+        st.markdown(f"- 窓口会社：{data.get('窓口会社') or ''}")
+            
+    with st.expander("技術情報", expanded=False):
+        render_editable_row("原因", "原因", multiline=True)
+        render_editable_row("処置内容", "処置内容", multiline=True)
+        st.markdown(f"- 制御方式：{data.get('制御方式') or ''}")
+        st.markdown(f"- 契約種別：{data.get('契約種別') or ''}")
+        st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
+
+
+    with st.expander("その他", expanded=False):
+        st.markdown(f"- 所属：{data.get('所属') or ''}")
+        st.markdown(f"- 対応者：{data.get('対応者') or ''}")
+        st.markdown(f"- 送信者：{data.get('送信者') or ''}")
+        st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
+        st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
+        st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
+        st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
 
     st.divider()
     try:
