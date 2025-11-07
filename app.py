@@ -254,7 +254,17 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-st.title(APP_TITLE)
+#st.title(APP_TITLE)
+# タイトル非表示＋上部余白を最小化
+st.markdown(
+    """
+    <style>
+    header {visibility: hidden;}
+    .block-container {padding-top: 0rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 if "step" not in st.session_state:
     st.session_state.step = 1
