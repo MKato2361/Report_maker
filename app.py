@@ -299,7 +299,7 @@ elif st.session_state.step == 2 and st.session_state.authed:
         st.error(f"テンプレートファイルが見つかりません: {template_path}")
         st.stop()
 
-    aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービスなど）", value=st.session_state.affiliation)
+    aff = st.text_input("所属", value=st.session_state.affiliation)
     st.session_state.affiliation = aff
 
     processing_after = st.text_input("処理修理後（任意）")
