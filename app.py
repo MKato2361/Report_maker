@@ -357,8 +357,6 @@ elif st.session_state.step == 3 and st.session_state.authed:
 
         with st.expander("通報・受付情報", expanded=True):
             st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
-            st.markdown(f"- 通報者：{data.get('通報者') or ''}")
-            st.markdown(f"- 受信内容：\n\n{data.get('受信内容') or ''}")
 
             # ← ここに編集行を追加（表示は残す）
             render_editable_row("通報者", "通報者", multiline=False)
