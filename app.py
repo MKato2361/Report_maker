@@ -101,4 +101,59 @@ AAAAAAAAAAAAAAAAAAAAAPgN/wECqE4hx9I5pQAAAABJRU5ErkJggg==
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
+# ============================================================
+# Part 2/2
+# チェックボックス画像埋め込み + UI制御完結
+# ============================================================
+import base64
+from openpyxl.drawing.image import Image as XLImage
+
+
+def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
+    """
+    .xlsx テンプレ（.xlsbをExcelで保存し直したもの）に値を書き込み
+    + チェックボックス画像（I10:P11）を埋め込み貼付して返す
+    """
+    wb = load_workbook(io.BytesIO(template_bytes))
+    ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
+
+    # --- 単項目 ---
+    if data.get("管理番号"): ws["C12"] = data["管理番号"]
+    if data.get("メーカー"): ws["J12"] = data["メーカー"]
+    if data.get("制御方式"): ws["M12"] = data["制御方式"]
+    if data.get("受信内容"): ws["C15"] = data["受信内容"]
+    if data.get("通報者"): ws["C14"] = data["通報者"]
+    if data.get("対応者"): ws["L37"] = data["対応者"]
+
+    # --- 処理修理後（C35） ---
+    pa = st.session_state.get("processing_after")
+    if pa:
+        ws["C35"] = pa
+    if data.get("所属"): ws["C37"] = data["所属"]
+
+    # --- 現在日付をB5/D5/F5へ書き込み（JST） ---
+    now = datetime.now(JST)
+    ws["B5"] = now.year
+    ws["D5"] = now.month
+    ws["F5"] = now.day
+
+    # --- 日付・時刻（分割入力） ---
+    def write_dt_block(base_row: int, src_key: str):
+        dt = _try_parse_datetime(data.get(src_key))
+        y, m, d, wd, hh, mm = _split_dt_components(dt)
+        cellmap = {"Y": f"C{base_row}", "Mo": f"F{base_row}", "D": f"H{base_row}",
+                   "W": f"J{base_row}", "H": f"M{base_row}", "Min": f"O{base_row}"}
+        if y is not None: ws[cellmap["Y"]] = y
+        if m is not None: ws[cellmap["Mo"]] = m
+        if d is not None: ws[cellmap["D"]] = d
+        if wd is not None: ws[cellmap["W"]] = wd
+        if hh is not None: ws[cellmap["H"]] = f"{hh:02d}"
+        if mm is not None: ws[cellmap["Min"]] = f"{mm:02d}"
+
+    write_dt_block(13, "受信時刻")
+    write_dt_block(19, "現着時刻")
+    write_dt_block(36, "完了時刻")
+
+    # --- 複数行（最大5行、超過は「…」） ---
+    def fil
 
