@@ -218,10 +218,8 @@ elif st.session_state.step == 3 and st.session_state.authed:
         render_editable_row("受信内容", "受信内容", multiline=True)
     with st.expander("現着・作業・完了情報", expanded=True):
         render_editable_row("現着状況", "現着状況", multiline=True)
-    with st.expander("技術情報", expanded=False):
         render_editable_row("原因", "原因", multiline=True)
         render_editable_row("処置内容", "処置内容", multiline=True)
-    with st.expander("その他", expanded=False):
         render_editable_row("処理修理後", "処理修理後", multiline=True)
 
     st.divider()
