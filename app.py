@@ -312,41 +312,41 @@ elif st.session_state.step == 3 and st.session_state.authed:
         def _edit_key(key: str) -> str:
             return f"__edit_mode__{key}"
 
-def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
-    """表示はそのまま維持しつつ、右側に✏️ボタン→入力欄に切替（項目別）"""
-    if _edit_key(key) not in st.session_state:
-        st.session_state[_edit_key(key)] = False
-
-    # 表示＋アイコンボタン横並び
-    cols = st.columns([6, 1])
-    with cols[0]:
-        current_val = data.get(key) or ""
-        if multiline:
-            st.markdown(f"・**{label}**：\n\n{current_val}")
-        else:
-            st.markdown(f"・**{label}**：{current_val}")
-    with cols[1]:
-        if not st.session_state[_edit_key(key)]:
-            st.button("✏️", key=f"btn_edit_{key}", help=f"{label} を編集", on_click=lambda: st.session_state.update({_edit_key(key): True}))
-        else:
-            st.button("❌", key=f"btn_cancel_{key}", help="キャンセル", on_click=lambda: st.session_state.update({_edit_key(key): False}))
-
-    # 編集モードなら入力欄を表示
-    if st.session_state[_edit_key(key)]:
-        if multiline:
-            new_val = st.text_area(f"{label}（編集）", value=current_val, height=120, help=help_text, key=f"input_{key}")
-        else:
-            new_val = st.text_input(f"{label}（編集）", value=current_val, help=help_text, key=f"input_{key}")
-        c1, c2 = st.columns(2)
-        with c1:
-            def _save():
-                data[key] = new_val
+        def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
+            """表示はそのまま維持しつつ、右側に✏️ボタン→入力欄に切替（項目別）"""
+            if _edit_key(key) not in st.session_state:
                 st.session_state[_edit_key(key)] = False
-            st.button("✅ 保存", key=f"save_{key}", use_container_width=True, on_click=_save)
-        with c2:
-            st.button("キャンセル", key=f"cancel2_{key}", use_container_width=True, on_click=lambda: st.session_state.update({_edit_key(key): False}))
-        st.markdown("---")
 
+            # 表示＋アイコンボタン横並び
+            cols = st.columns([6, 1])
+            with cols[0]:
+                # 元の表示を踏襲（markdownと同等の表示）
+                current_val = data.get(key) or ""
+                if multiline:
+                    st.markdown(f"（編集対象）**{label}**：\n\n{current_val}")
+                else:
+                    st.markdown(f"（編集対象）**{label}**：{current_val}")
+            with cols[1]:
+                if not st.session_state[_edit_key(key)]:
+                    st.button("✏️", key=f"btn_edit_{key}", help=f"{label} を編集", on_click=lambda: st.session_state.update({_edit_key(key): True}))
+                else:
+                    st.button("❌", key=f"btn_cancel_{key}", help="キャンセル", on_click=lambda: st.session_state.update({_edit_key(key): False}))
+
+            # 編集モードなら入力欄を表示
+            if st.session_state[_edit_key(key)]:
+                if multiline:
+                    new_val = st.text_area(f"{label}・", value=current_val, height=120, help=help_text, key=f"input_{key}")
+                else:
+                    new_val = st.text_input(f"{label}・", value=current_val, help=help_text, key=f"input_{key}")
+                c1, c2 = st.columns(2)
+                with c1:
+                    def _save():
+                        data[key] = new_val
+                        st.session_state[_edit_key(key)] = False
+                    st.button("✅ 保存", key=f"save_{key}", use_container_width=True, on_click=_save)
+                with c2:
+                    st.button("キャンセル", key=f"cancel2_{key}", use_container_width=True, on_click=lambda: st.session_state.update({_edit_key(key): False}))
+                st.markdown("---")
 
         # ====== 元の「表示UI」はそのまま維持 ======
         with st.expander("基本情報", expanded=True):
@@ -420,6 +420,6 @@ def render_editable_row(label: str, key: str, multiline: bool = False, help_text
             st.session_state.affiliation = ""
             st.rerun()
 
-    else:
-        st.warning("認証が必要です。Step 1に戻ります。")
-        st.session_state.step = 1
+else:
+    st.warning("認証が必要です。Step 1に戻ります。")
+    st.session_state.step = 1
