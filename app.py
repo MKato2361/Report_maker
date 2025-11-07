@@ -2,12 +2,6 @@
 # ------------------------------------------------------------
 # 故障メール → 正規表現抽出 → 既存テンプレ(.xlsm)へ書込み → ダウンロード
 # 3ステップUI / パスコード認証 / 編集不可 / 折りたたみ表示（時系列）
-# 仕様反映：
-#   - 曜日：日本語（例：月）
-#   - 複数行：最大5行。超過は「…」付与
-#   - 通報者：原文そのまま（様/電話番号含む）
-#   - ファイル名：管理番号_物件名_日付（yyyymmdd）
-#   - マクロ保持対応（keep_vba=True）
 # ------------------------------------------------------------
 import io
 import re
@@ -16,27 +10,21 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple, List
 import os
 from openpyxl import load_workbook
-from openpyxl.drawing.image import Image as XLImage
 import streamlit as st
 
 JST = timezone(timedelta(hours=9))
-
 APP_TITLE = "故障報告メール → Excel自動生成（マクロ対応）"
-PASSCODE_DEFAULT = "1357"  # 公開運用時は .streamlit/secrets.toml の APP_PASSCODE を推奨
+PASSCODE_DEFAULT = "1357"
 PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
-
-# テンプレートのシート名（ユーザー共有仕様に準拠）
 SHEET_NAME = "緊急出動報告書（リンク付き）"
-
-# ====== ユーティリティ ======
 WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
 
+# ========== ユーティリティ関数 ==========
 def normalize_text(text: str) -> str:
     if not text:
         return ""
     t = unicodedata.normalize("NFKC", text)
-    t = t.replace("：", ":")
-    t = t.replace("\t", " ").replace("\r\n", "\n").replace("\r", "\n")
+    t = t.replace("：", ":").replace("\t", " ").replace("\r\n", "\n").replace("\r", "\n")
     return t
 
 def _search_one(pattern: str, text: str, flags=0) -> Optional[str]:
@@ -44,9 +32,6 @@ def _search_one(pattern: str, text: str, flags=0) -> Optional[str]:
     return m.group(1).strip() if m else None
 
 def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optional[str]:
-    """
-    ラベル key の位置から、次のいずれかのラベル直前までを抽出（複数行対応）
-    """
     lab = labels[key]
     others = [v for k, v in labels.items() if k != key]
     boundary = "|".join([f"(?:{v})" for v in others]) if others else r"$"
@@ -57,33 +42,13 @@ def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optiona
 def _try_parse_datetime(s: Optional[str]) -> Optional[datetime]:
     if not s:
         return None
-    cand = s.strip()
-    cand = cand.replace("年", "/").replace("月", "/").replace("日", "")
-    cand = cand.replace("-", "/")
+    cand = s.strip().replace("年", "/").replace("月", "/").replace("日", "").replace("-", "/")
     for fmt in ("%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d"):
         try:
             return datetime.strptime(cand, fmt)
         except Exception:
             pass
     return None
-
-def _split_dt_components(dt: Optional[datetime]) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[str], Optional[int], Optional[int]]:
-    if not dt:
-        return None, None, None, None, None, None
-    y = dt.year
-    m = dt.month
-    d = dt.day
-    wd = WEEKDAYS_JA[dt.weekday()]
-    hh = dt.hour
-    mm = dt.minute
-    return y, m, d, wd, hh, mm
-
-def _first_date_yyyymmdd(*vals) -> str:
-    for v in vals:
-        dt = _try_parse_datetime(v)
-        if dt:
-            return dt.strftime("%Y%m%d")
-    return datetime.now().strftime("%Y%m%d")
 
 def minutes_between(a: Optional[str], b: Optional[str]) -> Optional[int]:
     s = _try_parse_datetime(a)
@@ -92,24 +57,11 @@ def minutes_between(a: Optional[str], b: Optional[str]) -> Optional[int]:
         return int((e - s).total_seconds() // 60)
     return None
 
-def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
-    if not text:
-        return []
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip() != ""]
-    if len(lines) <= max_lines:
-        return lines
-    kept = lines[: max_lines - 1] + [lines[max_lines - 1] + "…"]
-    return kept
-
-# ====== 正規表現 抽出 ======
+# ========== 抽出処理 ==========
 def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
-    """
-    共有サンプルフォーマットに準拠して抽出
-    """
     t = normalize_text(raw_text)
-
-    subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
-    subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
+    subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t)
+    subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t)
 
     single_line = {
         "管理番号": r"管理番号\s*:\s*([A-Za-z0-9\-]+)",
@@ -126,7 +78,7 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "対応者": r"対応者\s*:\s*(.+)",
         "送信者": r"送信者\s*:\s*(.+)",
         "受付番号": r"受付番号\s*:\s*([0-9]+)",
-        "受付URL": r"詳細はこちら\s*:\s*.*?(https?://\S+)",
+        "受付URL": r"詳細はこちら\s*:\s*(https?://\S+)",
         "現着完了登録URL": r"現着・完了登録はこちら\s*:\s*(https?://\S+)",
     }
 
@@ -135,125 +87,58 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
-        "通報者": r"通報者\s*:",
-        "対応者": r"対応者\s*:",
-        "送信者": r"送信者\s*:",
-        "現着時刻": r"現着時刻\s*:",
-        "完了時刻": r"完了時刻\s*:",
     }
 
-    out = {
-        "案件種別(件名)": subject_case,
-        "管理番号": None,
-        "物件名": None,
-        "住所": None,
-        "窓口会社": None,
-        "メーカー": None,
-        "制御方式": None,
-        "契約種別": None,
-        "受信時刻": None,
-        "受信内容": None,
-        "通報者": None,
-        "現着時刻": None,
-        "現着状況": None,
-        "完了時刻": None,
-        "原因": None,
-        "処置内容": None,
-        "対応者": None,
-        "送信者": None,
-        "受付番号": None,
-        "受付URL": None,
-        "現着完了登録URL": None,
-    }
+    out = {k: None for k in ["案件種別(件名)", "管理番号", "物件名", "住所", "窓口会社", "メーカー", "制御方式",
+                              "契約種別", "受信時刻", "受信内容", "通報者", "現着時刻", "現着状況", "完了時刻",
+                              "原因", "処置内容", "対応者", "送信者", "受付番号", "受付URL", "現着完了登録URL"]}
+    out["案件種別(件名)"] = subject_case
 
     for k, pat in single_line.items():
-        out[k] = _search_one(pat, t, flags=re.IGNORECASE | re.MULTILINE)
-
+        out[k] = _search_one(pat, t, re.IGNORECASE)
     if not out["管理番号"] and subject_manageno:
         out["管理番号"] = subject_manageno
-
     for k in multiline_labels:
         out[k] = _search_span_between(multiline_labels, k, t)
-
     dur = minutes_between(out["現着時刻"], out["完了時刻"])
-    out["作業時間_分"] = str(dur) if dur is not None and dur >= 0 else None
+    out["作業時間_分"] = str(dur) if dur else None
     return out
 
-# ====== テンプレ書き込み ======
+# ========== Excel出力 ==========
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
-    """
-    .xlsm テンプレに値を書き込んで返す（VBA保持）
-    ※ 複数行項目はセル内改行（wrapText）で反映
-    """
     wb = load_workbook(io.BytesIO(template_bytes), keep_vba=True)
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
-
-    # --- 単項目 ---
-    if data.get("管理番号"): ws["C12"] = data["管理番号"]
-    if data.get("メーカー"): ws["J12"] = data["メーカー"]
-    if data.get("制御方式"): ws["M12"] = data["制御方式"]
-    if data.get("通報者"): ws["C14"] = data["通報者"]
-    if data.get("対応者"): ws["L37"] = data["対応者"]
-    if data.get("所属"): ws["C37"] = data["所属"]
-
-    # 日付（現在日）
     now = datetime.now(JST)
-    ws["B5"] = now.year
-    ws["D5"] = now.month
-    ws["F5"] = now.day
+    ws["B5"], ws["D5"], ws["F5"] = now.year, now.month, now.day
+    ws["C12"], ws["J12"], ws["M12"] = data.get("管理番号"), data.get("メーカー"), data.get("制御方式")
+    ws["C14"], ws["L37"], ws["C37"] = data.get("通報者"), data.get("対応者"), data.get("所属")
 
-    # --- 複数行セル書き込み（セル内改行保持） ---
-    def write_multiline(cell_ref: str, text: Optional[str]):
-        if text is None:
-            ws[cell_ref] = ""
-            return
-        s = text.replace("\r\n", "\n").replace("\r", "\n")
-        ws[cell_ref] = s
-        try:
-            ws[cell_ref].alignment = ws[cell_ref].alignment.copy(wrapText=True)
-        except Exception:
-            pass
+    def write_multiline(ref, val):
+        if not val:
+            ws[ref] = ""
+        else:
+            ws[ref] = val.replace("\r\n", "\n")
+            ws[ref].alignment = ws[ref].alignment.copy(wrapText=True)
 
-    # 受信内容/現着状況/原因/処置内容/処理修理後 をセル1つに改行込みで出力
     write_multiline("C15", data.get("受信内容"))
     write_multiline("C20", data.get("現着状況"))
     write_multiline("C25", data.get("原因"))
     write_multiline("C30", data.get("処置内容"))
+    write_multiline("C35", data.get("処理修理後") or st.session_state.get("processing_after", ""))
 
-    # 「処理修理後」は Step2で入力した processing_after を後方互換で使用
-    proc_after = data.get("処理修理後")
-    if not proc_after:
-        proc_after = st.session_state.get("processing_after")
-    write_multiline("C35", proc_after)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
 
-    # --- （元の複数行行分割は要件に合わせて単セル化済み） ---
-
-    out = io.BytesIO()
-    wb.save(out)
-    return out.getvalue()
-
-def build_filename(data: Dict[str, Optional[str]]) -> str:
-    base_day = _first_date_yyyymmdd(data.get("現着時刻"), data.get("完了時刻"), data.get("受信時刻"))
-    manageno = (data.get("管理番号") or "UNKNOWN").replace("/", "_")
-    bname = (data.get("物件名") or "").strip().replace("/", "_")
-    if bname:
-        return f"緊急出動報告書_{manageno}_{bname}_{base_day}.xlsm"
-    return f"緊急出動報告書_{manageno}_{base_day}.xlsm"
-
-# ====== UI（Step1〜2 は元のまま） ======
+# ========== UI ==========
 st.set_page_config(page_title=APP_TITLE, layout="centered")
 st.title(APP_TITLE)
-
 if "step" not in st.session_state:
     st.session_state.step = 1
 if "authed" not in st.session_state:
     st.session_state.authed = False
-if "extracted" not in st.session_state:
-    st.session_state.extracted = None
-if "affiliation" not in st.session_state:
-    st.session_state.affiliation = ""
 
-# Step 1: 認証
+# --- Step1: 認証 ---
 if st.session_state.step == 1:
     st.subheader("Step 1. パスコード認証")
     pw = st.text_input("パスコードを入力してください", type="password")
@@ -265,9 +150,9 @@ if st.session_state.step == 1:
         else:
             st.error("パスコードが違います。")
 
-# Step 2: 本文貼付・テンプレ自動読み込み（元のまま）
+# --- Step2: 本文入力 ---
 elif st.session_state.step == 2 and st.session_state.authed:
-    st.subheader("Step 2. メール本文の貼り付け / 所属")
+    st.subheader("Step 2. 本文貼付 / 所属入力")
 
     template_path = "template.xlsm"
     if os.path.exists(template_path):
@@ -275,151 +160,86 @@ elif st.session_state.step == 2 and st.session_state.authed:
             st.session_state.template_xlsx_bytes = f.read()
         st.success(f"テンプレートを読み込みました: {template_path}")
     else:
-        st.error(f"テンプレートファイルが見つかりません: {template_path}")
+        st.error("template.xlsm が見つかりません。")
         st.stop()
 
-    aff = st.text_input("所属（例：札幌支店 / 本社 / 道央サービスなど）", value=st.session_state.affiliation)
-    st.session_state.affiliation = aff
-    processing_after = st.text_input("処理修理後（任意）")
-    if processing_after:
-        st.session_state["processing_after"] = processing_after
+    aff = st.text_input("所属", value=st.session_state.get("affiliation", ""))
+    st.session_state["affiliation"] = aff
+    proc = st.text_input("処理修理後（任意）", value=st.session_state.get("processing_after", ""))
+    st.session_state["processing_after"] = proc
+    text = st.text_area("故障完了メール本文を貼り付け", height=240)
 
-    text = st.text_area("故障完了メール（本文）を貼り付け", height=240)
-
-    c1, c2 = st.columns(2)
-    with c1:
+    col1, col2 = st.columns(2)
+    with col1:
         if st.button("抽出する", use_container_width=True):
             if not text.strip():
                 st.warning("本文が空です。")
             else:
                 st.session_state.extracted = extract_fields(text)
-                st.session_state.extracted["所属"] = st.session_state.affiliation
+                st.session_state.extracted["所属"] = aff
                 st.session_state.step = 3
                 st.rerun()
-    with c2:
+    with col2:
         if st.button("クリア", use_container_width=True):
             st.session_state.extracted = None
             st.session_state.affiliation = ""
-# ===== Step 3：表示は元のまま＋右側に ✏️ 編集アイコンで項目別編集 =====
+
+# --- Step3: 結果確認・編集 ---
 elif st.session_state.step == 3 and st.session_state.authed:
     st.subheader("Step 3. 抽出結果の確認 → Excel生成")
-
     data = st.session_state.extracted or {}
-    if not data:
-        st.warning("抽出データがありません。")
-    else:
-        # --- 編集モード管理（各項目ごとにトグル） ---
-        def _edit_key(key: str) -> str:
-            return f"__edit_mode__{key}"
 
-        def render_editable_row(label: str, key: str, multiline: bool = False, help_text: str = ""):
-            """表示はそのまま維持しつつ、右側に✏️ボタン→入力欄に切替（項目別）"""
-            if _edit_key(key) not in st.session_state:
-                st.session_state[_edit_key(key)] = False
+    def _edit_key(key): return f"__edit_mode__{key}"
 
-            # 表示＋アイコンボタン横並び
-            cols = st.columns([6, 1])
-            with cols[0]:
-                # 元の表示を踏襲（markdownと同等の表示）
-                current_val = data.get(key) or ""
-                if multiline:
-                    st.markdown(f"（編集対象）**{label}**：\n\n{current_val}")
-                else:
-                    st.markdown(f"（編集対象）**{label}**：{current_val}")
-            with cols[1]:
-                if not st.session_state[_edit_key(key)]:
-                    st.button("✏️", key=f"btn_edit_{key}", help=f"{label} を編集", on_click=lambda: st.session_state.update({_edit_key(key): True}))
-                else:
-                    st.button("❌", key=f"btn_cancel_{key}", help="キャンセル", on_click=lambda: st.session_state.update({_edit_key(key): False}))
+    def render_editable_row(label, key, multiline=False, help_text=""):
+        if _edit_key(key) not in st.session_state:
+            st.session_state[_edit_key(key)] = False
+        cols = st.columns([6, 1])
+        with cols[0]:
+            val = data.get(key) or ""
+            st.markdown(f"・**{label}**：{val}" if not multiline else f"・**{label}**：\n\n{val}")
+        with cols[1]:
+            if not st.session_state[_edit_key(key)]:
+                st.button("✏️", key=f"btn_{key}", on_click=lambda: st.session_state.update({_edit_key(key): True}))
+            else:
+                st.button("❌", key=f"btn_c_{key}", on_click=lambda: st.session_state.update({_edit_key(key): False}))
+        if st.session_state[_edit_key(key)]:
+            new_val = st.text_area(f"{label}（編集）", value=val, height=120) if multiline else st.text_input(f"{label}（編集）", value=val)
+            c1, c2 = st.columns(2)
+            with c1:
+                def _save(): data[key] = new_val; st.session_state[_edit_key(key)] = False
+                st.button("✅ 保存", key=f"save_{key}", on_click=_save, use_container_width=True)
+            with c2:
+                st.button("キャンセル", key=f"cancel_{key}", on_click=lambda: st.session_state.update({_edit_key(key): False}), use_container_width=True)
+            st.markdown("---")
 
-            # 編集モードなら入力欄を表示
-            if st.session_state[_edit_key(key)]:
-                if multiline:
-                    new_val = st.text_area(f"{label}・", value=current_val, height=120, help=help_text, key=f"input_{key}")
-                else:
-                    new_val = st.text_input(f"{label}・", value=current_val, help=help_text, key=f"input_{key}")
-                c1, c2 = st.columns(2)
-                with c1:
-                    def _save():
-                        data[key] = new_val
-                        st.session_state[_edit_key(key)] = False
-                    st.button("✅ 保存", key=f"save_{key}", use_container_width=True, on_click=_save)
-                with c2:
-                    st.button("キャンセル", key=f"cancel2_{key}", use_container_width=True, on_click=lambda: st.session_state.update({_edit_key(key): False}))
-                st.markdown("---")
+    with st.expander("通報・受付情報", expanded=True):
+        render_editable_row("通報者", "通報者")
+        render_editable_row("受信内容", "受信内容", multiline=True)
+    with st.expander("現着・作業・完了情報", expanded=True):
+        render_editable_row("現着状況", "現着状況", multiline=True)
+    with st.expander("技術情報", expanded=False):
+        render_editable_row("原因", "原因", multiline=True)
+        render_editable_row("処置内容", "処置内容", multiline=True)
+    with st.expander("その他", expanded=False):
+        render_editable_row("処理修理後", "処理修理後", multiline=True)
 
-        # ====== 元の「表示UI」はそのまま維持 ======
-        with st.expander("基本情報", expanded=True):
-            st.markdown(f"- 管理番号：{data.get('管理番号') or ''}")
-            st.markdown(f"- 物件名：{data.get('物件名') or ''}")
-            st.markdown(f"- 住所：{data.get('住所') or ''}")
-            st.markdown(f"- 窓口会社：{data.get('窓口会社') or ''}")
+    st.divider()
+    try:
+        out_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
+        fname = f"{data.get('管理番号') or 'UNKNOWN'}_{datetime.now().strftime('%Y%m%d')}.xlsm"
+        st.download_button("Excelを生成（.xlsm）", data=out_bytes, file_name=fname, mime="application/vnd.ms-excel.sheet.macroEnabled.12", use_container_width=True)
+    except Exception as e:
+        st.error(f"テンプレート書き込み中にエラー: {e}")
 
-        with st.expander("通報・受付情報", expanded=True):
-            st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
-
-            # ← ここに編集行を追加（表示は残す）
-            render_editable_row("通報者", "通報者", multiline=False)
-            render_editable_row("受信内容", "受信内容", multiline=True)
-
-        with st.expander("現着・作業・完了情報", expanded=True):
-            st.markdown(f"- 現着時刻：{data.get('現着時刻') or ''}")
-            st.markdown(f"- 完了時刻：{data.get('完了時刻') or ''}")
-            render_editable_row("現着状況", "現着状況", multiline=True)
-            dur = data.get("作業時間_分")
-            if dur:
-                st.info(f"作業時間（概算）：{dur} 分")
-
-
-
-        with st.expander("技術情報", expanded=False):
-            render_editable_row("原因", "原因", multiline=True)
-            render_editable_row("処置内容", "処置内容", multiline=True)
-            st.markdown(f"- 制御方式：{data.get('制御方式') or ''}")
-            st.markdown(f"- 契約種別：{data.get('契約種別') or ''}")
-            st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
-
-
-        with st.expander("その他", expanded=False):
-            st.markdown(f"- 所属：{data.get('所属') or ''}")
-            st.markdown(f"- 対応者：{data.get('対応者') or ''}")
-            render_editable_row("処理修理後", "処理修理後", multiline=True, help_text="未入力の場合はStep2の値（処理修理後）を出力時に使用します。")
-            st.markdown(f"- 送信者：{data.get('送信者') or ''}")
-            st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
-            st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
-            st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
-            st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
-
-
-
-        st.divider()
-
-        # 生成・ダウンロード（元のまま）
-        try:
-            xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
-            fname = build_filename(data)
-            st.download_button(
-                "Excelを生成（.xlsm）",
-                data=xlsx_bytes,
-                file_name=fname,
-                mime="application/vnd.ms-excel.sheet.macroEnabled.12",
-                use_container_width=True,
-            )
-        except Exception as e:
-            st.error(f"テンプレート書き込み中にエラー: {e}")
-
-        # ▼ Step2に戻る／最初に戻る（元のまま）
+    col1, col2 = st.columns(2)
+    with col1:
         if st.button("Step2に戻る", use_container_width=True):
-            st.session_state.step = 2
-            st.rerun()
-
+            st.session_state.step = 2; st.rerun()
+    with col2:
         if st.button("最初に戻る", use_container_width=True):
-            st.session_state.step = 1
-            st.session_state.extracted = None
-            st.session_state.template_xlsx_bytes = None
-            st.session_state.affiliation = ""
-            st.rerun()
+            st.session_state.step = 1; st.session_state.extracted = None; st.rerun()
 
 else:
-    st.warning("認証が必要です。Step 1に戻ります。")
+    st.warning("認証が必要です。")
     st.session_state.step = 1
