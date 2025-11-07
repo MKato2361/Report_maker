@@ -197,16 +197,16 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     fill_multiline("C", 30, data.get("処置内容"))
 
     # --- チェックボックス画像貼付 ---
-    img_path = "check.png"
-    if os.path.exists(img_path):
-        try:
-            img = XLImage(img_path)
-            img.anchor = "I10"
-            img.width = 400
-            img.height = 40
-            ws.add_image(img)
-        except Exception as e:
-            print("チェックボックス画像貼付中にエラー:", e)
+#    img_path = "check.png"
+#    if os.path.exists(img_path):
+#        try:
+#            img = XLImage(img_path)
+#            img.anchor = "I10"
+#            img.width = 400
+#            img.height = 40
+#            ws.add_image(img)
+#        except Exception as e:
+#            print("チェックボックス画像貼付中にエラー:", e)
 
     out = io.BytesIO()
     wb.save(out)
