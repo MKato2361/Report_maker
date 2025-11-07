@@ -320,11 +320,12 @@ elif st.session_state.step == 3 and st.session_state.authed:
             # 表示＋アイコンボタン横並び
             cols = st.columns([6, 1])
             with cols[0]:
+                # 元の表示を踏襲（markdownと同等の表示）
                 current_val = data.get(key) or ""
                 if multiline:
-                    st.markdown(f"・**{label}**：\n\n{current_val}")
+                    st.markdown(f"（編集対象）**{label}**：\n\n{current_val}")
                 else:
-                    st.markdown(f"・**{label}**：{current_val}")
+                    st.markdown(f"（編集対象）**{label}**：{current_val}")
             with cols[1]:
                 if not st.session_state[_edit_key(key)]:
                     st.button("✏️", key=f"btn_edit_{key}", help=f"{label} を編集", on_click=lambda: st.session_state.update({_edit_key(key): True}))
@@ -334,9 +335,9 @@ elif st.session_state.step == 3 and st.session_state.authed:
             # 編集モードなら入力欄を表示
             if st.session_state[_edit_key(key)]:
                 if multiline:
-                    new_val = st.text_area(f"{label}（編集）", value=current_val, height=120, help=help_text, key=f"input_{key}")
+                    new_val = st.text_area(f"{label}・", value=current_val, height=120, help=help_text, key=f"input_{key}")
                 else:
-                    new_val = st.text_input(f"{label}（編集）", value=current_val, help=help_text, key=f"input_{key}")
+                    new_val = st.text_input(f"{label}・", value=current_val, help=help_text, key=f"input_{key}")
                 c1, c2 = st.columns(2)
                 with c1:
                     def _save():
@@ -357,15 +358,13 @@ elif st.session_state.step == 3 and st.session_state.authed:
         with st.expander("通報・受付情報", expanded=True):
             st.markdown(f"- 受信時刻：{data.get('受信時刻') or ''}")
 
-            # 編集行
+            # ← ここに編集行を追加（表示は残す）
             render_editable_row("通報者", "通報者", multiline=False)
             render_editable_row("受信内容", "受信内容", multiline=True)
 
         with st.expander("現着・作業・完了情報", expanded=True):
             st.markdown(f"- 現着時刻：{data.get('現着時刻') or ''}")
             st.markdown(f"- 完了時刻：{data.get('完了時刻') or ''}")
-            st.markdown(f"- 現着状況：\n\n{data.get('現着状況') or ''}")
-            # 編集行
             render_editable_row("現着状況", "現着状況", multiline=True)
             dur = data.get("作業時間_分")
             if dur:
@@ -374,28 +373,28 @@ elif st.session_state.step == 3 and st.session_state.authed:
 
 
         with st.expander("技術情報", expanded=False):
+            render_editable_row("原因", "原因", multiline=True)
+            render_editable_row("処置内容", "処置内容", multiline=True)
             st.markdown(f"- 制御方式：{data.get('制御方式') or ''}")
             st.markdown(f"- 契約種別：{data.get('契約種別') or ''}")
             st.markdown(f"- メーカー：{data.get('メーカー') or ''}")
 
-            # 編集行
-            render_editable_row("原因", "原因", multiline=True)
-            render_editable_row("処置内容", "処置内容", multiline=True)
-            render_editable_row("処理修理後", "処理修理後", multiline=True, help_text="未入力の場合はStep2の値を出力時に使用します。")
 
         with st.expander("その他", expanded=False):
             st.markdown(f"- 所属：{data.get('所属') or ''}")
             st.markdown(f"- 対応者：{data.get('対応者') or ''}")
-            st.markdown(f"- 処理修理後：{st.session_state.get('processing_after', '') or data.get('処理修理後') or ''}")
+            render_editable_row("処理修理後", "処理修理後", multiline=True, help_text="未入力の場合はStep2の値（処理修理後）を出力時に使用します。")
             st.markdown(f"- 送信者：{data.get('送信者') or ''}")
             st.markdown(f"- 受付番号：{data.get('受付番号') or ''}")
             st.markdown(f"- 受付URL：{data.get('受付URL') or ''}")
             st.markdown(f"- 現着・完了登録URL：{data.get('現着完了登録URL') or ''}")
             st.markdown(f"- 案件種別(件名)：{data.get('案件種別(件名)') or ''}")
 
+
+
         st.divider()
 
-        # --- Excel生成＆ダウンロード ---
+        # 生成・ダウンロード（元のまま）
         try:
             xlsx_bytes = fill_template_xlsx(st.session_state.template_xlsx_bytes, data)
             fname = build_filename(data)
@@ -409,7 +408,7 @@ elif st.session_state.step == 3 and st.session_state.authed:
         except Exception as e:
             st.error(f"テンプレート書き込み中にエラー: {e}")
 
-        # --- Step戻るボタン群 ---
+        # ▼ Step2に戻る／最初に戻る（元のまま）
         if st.button("Step2に戻る", use_container_width=True):
             st.session_state.step = 2
             st.rerun()
