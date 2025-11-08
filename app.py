@@ -19,7 +19,6 @@ from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 import streamlit as st
 
-
 JST = timezone(timedelta(hours=9))
 
 APP_TITLE = "故障報告メール → Excel自動生成（マクロ対応）"
@@ -28,7 +27,6 @@ PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
 
 SHEET_NAME = "緊急出動報告書（リンク付き）"
 WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
-
 
 # -------------------------------------------------------------
 # ✏️ 編集フィールド共通関数（どのStepでも利用可能）
@@ -255,36 +253,8 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
     return f"緊急出動報告書_{manageno}_{base_day}.xlsm"
 
 # ====== Streamlit UI ======
-st.set_page_config(
-    page_title="故障報告書自動作成",
-    page_icon="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png",
-    layout="centered"
-)
-from streamlit.components.v1 import html
-
-# --- iPhone Safari対応：headタグにapple-touch-iconを直接追加 ---
-def inject_head_icon():
-    html("""
-    <script>
-    const link = document.createElement('link');
-    link.rel = 'apple-touch-icon';
-    link.sizes = '180x180';
-    link.href = 'https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png';
-    document.head.appendChild(link);
-    </script>
-    """, height=0)
-
-# headに挿入を実行
-inject_head_icon()
-# manifestは念のため残しておく
-st.markdown("""
-<link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/manifest.json">
-<meta name="theme-color" content="#c80000">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-""", unsafe_allow_html=True)
-
-
+st.set_page_config(page_title=APP_TITLE, layout="centered")
+#st.title(APP_TITLE)
 # タイトル非表示＋上部余白を最小化
 st.markdown(
     """
