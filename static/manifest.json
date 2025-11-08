@@ -8,17 +8,17 @@
   "description": "故障報告メールからExcel報告書を自動生成するツール",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/icon-192.png",
+      "src": "https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/icon-512.png",
+      "src": "https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     },
     {
-      "src": "https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/apple-touch-icon.png",
+      "src": "https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png",
       "sizes": "180x180",
       "type": "image/png",
       "purpose": "any maskable"
