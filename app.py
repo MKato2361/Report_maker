@@ -18,6 +18,22 @@ import os
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 import streamlit as st
+from streamlit.components.v1 import html
+
+# headタグに直接apple-touch-iconを埋め込む
+def inject_head_icon():
+    html("""
+    <script>
+    const link = document.createElement('link');
+    link.rel = 'apple-touch-icon';
+    link.sizes = '180x180';
+    link.href = 'https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png';
+    document.head.appendChild(link);
+    </script>
+    """, height=0)
+
+inject_head_icon()
+
 
 JST = timezone(timedelta(hours=9))
 
