@@ -254,16 +254,17 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-# --- PWAアイコンおよびmanifest設定（Streamlit Cloud用） ---
+# --- PWAアイコン（GitHub Raw URL経由） ---
 st.markdown("""
-    <link rel="apple-touch-icon" sizes="180x180" href="https://reportmaker-ksrnxmfg34faoteitkuhht.streamlit.app/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="https://reportmaker-ksrnxmfg34faoteitkuhht.streamlit.app/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="https://reportmaker-ksrnxmfg34faoteitkuhht.streamlit.app/icon-512.png">
-    <link rel="manifest" href="https://reportmaker-ksrnxmfg34faoteitkuhht.streamlit.app/manifest.json">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/icon-512.png">
+    <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/manifest.json">
     <meta name="theme-color" content="#c80000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 """, unsafe_allow_html=True)
+
 
 #st.title(APP_TITLE)
 # タイトル非表示＋上部余白を最小化
