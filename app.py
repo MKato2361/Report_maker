@@ -254,50 +254,15 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-# --- iOSで確実に効く：apple-touch-icon を base64 埋め込み ---
-import base64, io
-from PIL import Image
-
-def _load_png_bytes(path: str, fallback_url: str | None = None) -> bytes | None:
-    # 1) リポジトリ同階層にあるファイルを優先
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return f.read()
-    # 2) 予備（GitHub Raw など）を使う場合はここで読み込みたいが、
-    #    Streamlitの実行環境では外部HTTP取得が難しいため省略。
-    return None
-
-# apple-touch-icon（180x180）を読み込み → なければ192を縮小
-png_bytes = _load_png_bytes("apple-touch-icon.png")
-if not png_bytes:
-    raw192 = _load_png_bytes("icon-192.png")
-    if raw192:
-        with Image.open(io.BytesIO(raw192)) as im:
-            im = im.resize((180, 180), Image.LANCZOS)
-            buf = io.BytesIO()
-            im.save(buf, format="PNG")
-            png_bytes = buf.getvalue()
-
-icon_data_url = ""
-if png_bytes:
-    icon_b64 = base64.b64encode(png_bytes).decode("utf-8")
-    icon_data_url = f"data:image/png;base64,{icon_b64}"
-
-# バージョン文字列でキャッシュ破り（iOSはキャッシュが非常に強い）
-ver = datetime.now().strftime("%Y%m%d%H%M%S")
-
-st.markdown(f"""
-    <!-- iOSはmanifestを無視することがあるので apple-touch-icon を最優先で直埋め込み -->
-    <link rel="apple-touch-icon" sizes="180x180" href="{icon_data_url}">
-    <link rel="apple-touch-icon-precomposed" sizes="180x180" href="{icon_data_url}">
+# --- PWAアイコンとmanifest（staticフォルダ経由） ---
+st.markdown("""
+    <link rel="apple-touch-icon" sizes="180x180" href="static/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="static/icon-512.png">
+    <link rel="manifest" href="static/manifest.json">
     <meta name="theme-color" content="#c80000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-
-    <!-- Android/PWA向け（任意）。こちらは外部でもOK。キャッシュ破りクエリを付与 -->
-    <link rel="icon" type="image/png" sizes="192x192" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/icon-192.png?v={ver}">
-    <link rel="icon" type="image/png" sizes="512x512" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/icon-512.png?v={ver}">
-    <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/manifest.json?v={ver}">
 """, unsafe_allow_html=True)
 
 #st.title(APP_TITLE)
