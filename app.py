@@ -18,6 +18,17 @@ import os
 from openpyxl import load_workbook
 from openpyxl.drawing.image import Image as XLImage
 import streamlit as st
+
+
+JST = timezone(timedelta(hours=9))
+
+APP_TITLE = "故障報告メール → Excel自動生成（マクロ対応）"
+PASSCODE_DEFAULT = "1357"  # 公開運用時は .streamlit/secrets.toml の APP_PASSCODE を推奨
+PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
+
+SHEET_NAME = "緊急出動報告書（リンク付き）"
+WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
+
 import streamlit as st
 from streamlit.components.v1 import html
 
@@ -34,16 +45,6 @@ def inject_head_icon():
     """, height=0)
 
 inject_head_icon()
-
-
-JST = timezone(timedelta(hours=9))
-
-APP_TITLE = "故障報告メール → Excel自動生成（マクロ対応）"
-PASSCODE_DEFAULT = "1357"  # 公開運用時は .streamlit/secrets.toml の APP_PASSCODE を推奨
-PASSCODE = st.secrets.get("APP_PASSCODE", PASSCODE_DEFAULT)
-
-SHEET_NAME = "緊急出動報告書（リンク付き）"
-WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
 
 # -------------------------------------------------------------
 # ✏️ 編集フィールド共通関数（どのStepでも利用可能）
