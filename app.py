@@ -254,17 +254,17 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-# --- PWAアイコンとmanifest設定（Streamlit Cloud用） ---
+# --- PWAアイコンとmanifest設定（Streamlit Cloud用・Report_makerリポジトリ対応） ---
 st.markdown("""
     <!-- Apple / iOS 用 -->
-    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
     <!-- Android / PC Chrome 用 -->
-    <link rel="icon" type="image/png" sizes="192x192" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/icon-512.png">
-    <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/reportmaker/main/static/manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-512.png">
+    <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/manifest.json">
 
     <!-- 共通テーマ設定 -->
     <meta name="theme-color" content="#c80000">
