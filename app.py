@@ -254,19 +254,28 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-# --- PWAアイコンとmanifest設定（Streamlit Cloud用・Report_makerリポジトリ対応） ---
-st.markdown("""
-    <!-- Apple / iOS 用 -->
-    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png">
+import base64, requests
+
+# --- iOS向け apple-touch-icon をbase64で直埋め込み（Safari確実反映） ---
+try:
+    icon_url = "https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png"
+    icon_data = requests.get(icon_url, timeout=5).content
+    icon_b64 = base64.b64encode(icon_data).decode("utf-8")
+    apple_icon = f"data:image/png;base64,{icon_b64}"
+except Exception:
+    apple_icon = icon_url  # フォールバック
+
+st.markdown(f"""
+    <!-- iOS (Safari) -->
+    <link rel="apple-touch-icon" sizes="180x180" href="{apple_icon}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
 
-    <!-- Android / PC Chrome 用 -->
+    <!-- Android / PC -->
     <link rel="icon" type="image/png" sizes="192x192" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/icon-512.png">
     <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/manifest.json">
 
-    <!-- 共通テーマ設定 -->
     <meta name="theme-color" content="#c80000">
 """, unsafe_allow_html=True)
 
