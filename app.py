@@ -254,6 +254,17 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
 
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
+# --- PWA用アイコンとマニフェスト設定 ---
+st.markdown("""
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#c80000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+""", unsafe_allow_html=True)
+
 #st.title(APP_TITLE)
 # タイトル非表示＋上部余白を最小化
 st.markdown(
