@@ -260,7 +260,22 @@ st.set_page_config(
     page_icon="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png",
     layout="centered"
 )
+from streamlit.components.v1 import html
 
+# --- iPhone Safari対応：headタグにapple-touch-iconを直接追加 ---
+def inject_head_icon():
+    html("""
+    <script>
+    const link = document.createElement('link');
+    link.rel = 'apple-touch-icon';
+    link.sizes = '180x180';
+    link.href = 'https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/apple-touch-icon.png';
+    document.head.appendChild(link);
+    </script>
+    """, height=0)
+
+# headに挿入を実行
+inject_head_icon()
 # manifestは念のため残しておく
 st.markdown("""
 <link rel="manifest" href="https://raw.githubusercontent.com/MKato2361/Report_maker/main/static/manifest.json">
