@@ -21,7 +21,7 @@ import streamlit as st
 
 JST = timezone(timedelta(hours=9))
 
-APP_TITLE = "故障報告メール → Excel自動生成（マクロ対応）"
+APP_TITLE = "故障報告書自動生成"
 PASSCODE = st.secrets["APP_PASSCODE"]
 
 
