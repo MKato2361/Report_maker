@@ -203,7 +203,7 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     if data.get("管理番号"): ws["C12"] = data["管理番号"]
     if data.get("メーカー"): ws["J12"] = data["メーカー"]
     if data.get("制御方式"): ws["M12"] = data["制御方式"]
-    if data.get("受信内容"): ws["C15"] = data["受信内容"]
+    fill_multiline("C", 15, data.get("受信内容"), max_lines=4)
     if data.get("通報者"): ws["C14"] = data["通報者"]
     if data.get("対応者"): ws["L37"] = data["対応者"]
     pa = st.session_state.get("processing_after")
