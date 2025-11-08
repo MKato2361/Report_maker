@@ -199,6 +199,13 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
     wb = load_workbook(io.BytesIO(template_bytes), keep_vba=True)
     ws = wb[SHEET_NAME] if SHEET_NAME in wb.sheetnames else wb.active
+    
+    def fill_multiline(col_letter: str, start_row: int, text: Optional[str], max_lines: int = 5):
+        lines = _split_lines(text, max_lines=max_lines)
+        for i in range(max_lines):
+            ws[f"{col_letter}{start_row + i}"] = ""
+        for idx, line in enumerate(lines[:max_lines]):
+            ws[f"{col_letter}{start_row + idx}"] = line
 
     if data.get("管理番号"): ws["C12"] = data["管理番号"]
     if data.get("メーカー"): ws["J12"] = data["メーカー"]
@@ -229,12 +236,6 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
     write_dt_block(19, "現着時刻")
     write_dt_block(36, "完了時刻")
 
-    def fill_multiline(col_letter: str, start_row: int, text: Optional[str], max_lines: int = 5):
-        lines = _split_lines(text, max_lines=max_lines)
-        for i in range(max_lines):
-            ws[f"{col_letter}{start_row + i}"] = ""
-        for idx, line in enumerate(lines[:max_lines]):
-            ws[f"{col_letter}{start_row + idx}"] = line
 
     fill_multiline("C", 20, data.get("現着状況"))
     fill_multiline("C", 25, data.get("原因"))
