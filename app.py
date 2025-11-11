@@ -26,7 +26,6 @@ import streamlit as st
 JST = timezone(timedelta(hours=9))
 APP_TITLE = "故障報告書自動生成"
 
-
 def _get_passcode() -> str:
     """
     PASSCODEの安全取得。
@@ -44,7 +43,6 @@ def _get_passcode() -> str:
     # 開発用の空デフォルト（本番はSecrets/環境変数で上書き推奨）
     return ""
 
-
 SHEET_NAME = "緊急出動報告書（リンク付き）"
 WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -55,23 +53,19 @@ def _ensure_extracted():
     if "extracted" not in st.session_state or st.session_state.extracted is None:
         st.session_state.extracted = {}
 
-
 def _enter_edit_mode():
     _ensure_extracted()
     st.session_state.edit_mode = True
     st.session_state.edit_buffer = copy.deepcopy(st.session_state.extracted)
 
-
 def _cancel_edit():
     st.session_state.edit_mode = False
     st.session_state.edit_buffer = {}
-
 
 def _save_edit():
     st.session_state.extracted = copy.deepcopy(st.session_state.edit_buffer)
     st.session_state.edit_mode = False
     st.session_state.edit_buffer = {}
-
 
 def _get_working_dict() -> dict:
     """編集中はedit_buffer、それ以外はextractedを参照"""
@@ -79,14 +73,12 @@ def _get_working_dict() -> dict:
         return st.session_state.edit_buffer
     return st.session_state.extracted or {}
 
-
 def _set_working_value(key: str, value: str):
     if st.session_state.get("edit_mode"):
         st.session_state.edit_buffer[key] = value
     else:
         _ensure_extracted()
         st.session_state.extracted[key] = value
-
 
 # ✅ 必須項目（編集可能項目=必須）
 REQUIRED_KEYS = [
@@ -99,10 +91,8 @@ REQUIRED_KEYS = [
     "所属",
 ]
 
-
 def _is_required_missing(data: dict, key: str) -> bool:
     return key in REQUIRED_KEYS and not (data.get(key) or "").strip()
-
 
 def _display_text(value: str, max_lines: int):
     # 空は空のまま（ダッシュ等は出さない）
@@ -112,7 +102,6 @@ def _display_text(value: str, max_lines: int):
         lines = _split_lines(value, max_lines=max_lines)
         return "<br>".join(lines)
     return value.replace("\n", "<br>")
-
 
 # --- 一括編集：指定フィールドのみ編集可（ポップオーバーは廃止） ---
 def render_field(label: str, key: str, max_lines: int = 1, placeholder: str = "", editable_in_bulk: bool = False):
@@ -140,7 +129,6 @@ def render_field(label: str, key: str, max_lines: int = 1, placeholder: str = ""
                 st.markdown("<span class='missing'>未入力</span>", unsafe_allow_html=True)
             else:
                 st.markdown(_display_text(val, max_lines=max_lines), unsafe_allow_html=True)
-
 
 # 互換のため残置（未使用）
 def editable_field(label, key, max_lines=1):
@@ -182,7 +170,6 @@ def editable_field(label, key, max_lines=1):
                 st.session_state[edit_key] = False
                 st.rerun()
 
-
 # ====== テキスト整形・抽出ユーティリティ ======
 def normalize_text(text: str) -> str:
     if not text:
@@ -192,11 +179,9 @@ def normalize_text(text: str) -> str:
     t = t.replace("\t", " ").replace("\r\n", "\n").replace("\r", "\n")
     return t
 
-
 def _search_one(pattern: str, text: str, flags=0) -> Optional[str]:
     m = re.search(pattern, text, flags)
     return m.group(1).strip() if m else None
-
 
 def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optional[str]:
     lab = labels[key]
@@ -205,7 +190,6 @@ def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optiona
     pattern = rf"{lab}\s*(.+?)(?=\n(?:{boundary})|\Z)"
     m = re.search(pattern, text, flags=re.DOTALL | re.IGNORECASE)
     return m.group(1).strip() if m else None
-
 
 def _try_parse_datetime(s: Optional[str]) -> Optional[datetime]:
     if not s:
@@ -221,7 +205,6 @@ def _try_parse_datetime(s: Optional[str]) -> Optional[datetime]:
             pass
     return None
 
-
 def _split_dt_components(dt: Optional[datetime]) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[str], Optional[int], Optional[int]]:
     if not dt:
         return None, None, None, None, None, None
@@ -234,7 +217,6 @@ def _split_dt_components(dt: Optional[datetime]) -> Tuple[Optional[int], Optiona
     mm = dt.minute
     return y, m, d, wd, hh, mm
 
-
 def _first_date_yyyymmdd(*vals) -> str:
     for v in vals:
         dt = _try_parse_datetime(v)
@@ -242,14 +224,12 @@ def _first_date_yyyymmdd(*vals) -> str:
             return dt.strftime("%Y%m%d")
     return datetime.now(JST).strftime("%Y%m%d")
 
-
 def minutes_between(a: Optional[str], b: Optional[str]) -> Optional[int]:
     s = _try_parse_datetime(a)
     e = _try_parse_datetime(b)
     if s and e:
         return int((e - s).total_seconds() // 60)
     return None
-
 
 def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
     if not text:
@@ -260,20 +240,6 @@ def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
     kept = lines[: max_lines - 1] + [lines[max_lines - 1] + "…"]
     return kept
 
-
-# ---- 余分に巻き込まれたメタ行を削除（処置内容の安全弁）----
-def _strip_trailing_meta(text: Optional[str]) -> Optional[str]:
-    if not text:
-        return text
-    # 処置内容内に紛れた以下のラベル行を除去
-    META_LABEL_RE = re.compile(
-        r"^\s*(対応者|完了連絡先(?:1)?|送信者|詳細はこちら|現着・完了登録はこちら|受付番号)\s*:",
-        flags=re.IGNORECASE
-    )
-    cleaned = [ln for ln in text.splitlines() if not META_LABEL_RE.match(ln)]
-    return "\n".join(cleaned).strip()
-
-
 # ====== 正規表現 抽出 ======
 def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     t = normalize_text(raw_text)
@@ -282,57 +248,39 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
     subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
 
-    # 1行想定（行頭アンカーで厳密に）
+    # 1行想定
     single_line = {
-        "管理番号": r"(?im)^\s*管理番号\s*:\s*([A-Za-z0-9\-]+)\s*$",
-        "物件名": r"(?im)^\s*物件名\s*:\s*(.+)$",
-        "住所": r"(?im)^\s*住所\s*:\s*(.+)$",
-        "窓口会社": r"(?im)^\s*窓口\s*:\s*(.+)$",
-        "メーカー": r"(?im)^\s*メーカー\s*:\s*(.+)$",
-        "制御方式": r"(?im)^\s*制御方式\s*:\s*(.+)$",
-        "契約種別": r"(?im)^\s*契約種別\s*:\s*(.+)$",
-        "受信時刻": r"(?im)^\s*受信時刻\s*:\s*([0-9/\-:\s]+)$",
-        "現着時刻": r"(?im)^\s*現着時刻\s*:\s*([0-9/\-:\s]+)$",
-        "完了時刻": r"(?im)^\s*完了時刻\s*:\s*([0-9/\-:\s]+)$",
-        "通報者": r"(?im)^\s*通報者\s*:\s*(.+)$",
-        "対応者": r"(?im)^\s*対応者\s*:\s*(.+)$",
-        # 「完了連絡先1」「完了連絡先」どちらでもOK
-        "完了連絡先1": r"(?im)^\s*完了連絡先(?:1)?\s*:\s*(.+)$",
-        "送信者": r"(?im)^\s*送信者\s*:\s*(.+)$",
-        "受付番号": r"(?im)^\s*受付番号\s*:\s*([0-9]+)\s*$",
-        "受付URL": r"(?im)^\s*詳細はこちら\s*:\s*.*?(https?://\S+)\s*$",
-        "現着完了登録URL": r"(?im)^\s*現着・完了登録はこちら\s*:\s*(https?://\S+)\s*$",
+        "管理番号": r"管理番号\s*:\s*([A-Za-z0-9\-]+)",
+        "物件名": r"物件名\s*:\s*(.+)",
+        "住所": r"住所\s*:\s*(.+)",
+        "窓口会社": r"窓口\s*:\s*(.+)",
+        "メーカー": r"メーカー\s*:\s*(.+)",
+        "制御方式": r"制御方式\s*:\s*(.+)",
+        "契約種別": r"契約種別\s*:\s*(.+)",
+        "受信時刻": r"受信時刻\s*:\s*([0-9/\-:\s]+)",
+        "通報者": r"通報者\s*:\s*(.+)",
+        "現着時刻": r"現着時刻\s*:\s*([0-9/\-:\s]+)",
+        "完了時刻": r"完了時刻\s*:\s*([0-9/\-:\s]+)",
+        "対応者": r"対応者\s*:\s*(.+)",
+        "送信者": r"送信者\s*:\s*(.+)",
+        "受付番号": r"受付番号\s*:\s*([0-9]+)",
+        "受付URL": r"詳細はこちら\s*:\s*.*?(https?://\S+)",
+        "現着完了登録URL": r"現着・完了登録はこちら\s*:\s*(https?://\S+)",
     }
 
-    # 複数行想定（本文ブロック）
+    # 複数行想定（境界抽出）
     multiline_labels = {
         "受信内容": r"受信内容\s*:",
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
-    }
-
-    # ---- スパン抽出の境界に「単一行ラベル」も含めて巻き込み防止 ----
-    boundary_only = {
-        "管理番号": r"管理番号\s*:",
-        "物件名": r"物件名\s*:",
-        "住所": r"住所\s*:",
-        "窓口会社": r"窓口\s*:",
-        "メーカー": r"メーカー\s*:",
-        "制御方式": r"制御方式\s*:",
-        "契約種別": r"契約種別\s*:",
-        "受信時刻": r"受信時刻\s*:",
-        "現着時刻": r"現着時刻\s*:",
-        "完了時刻": r"完了時刻\s*:",
+        # 下記はフォーマット依存で複数行になりうるため残す
         "通報者": r"通報者\s*:",
         "対応者": r"対応者\s*:",
-        "完了連絡先1": r"完了連絡先(?:1)?\s*:",
         "送信者": r"送信者\s*:",
-        "受付番号": r"受付番号\s*:",
-        "受付URL": r"詳細はこちら\s*:",
-        "現着完了登録URL": r"現着・完了登録はこちら\s*:",
+        "現着時刻": r"現着時刻\s*:",
+        "完了時刻": r"完了時刻\s*:",
     }
-    span_labels = {**multiline_labels, **boundary_only}
 
     out: Dict[str, Optional[str]] = {k: None for k in set(single_line.keys()) | set(multiline_labels.keys())}
     out.update({
@@ -341,43 +289,20 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
         "現着完了登録URL": None,
     })
 
-    # 行単位でまず拾う
     for k, pat in single_line.items():
-        out[k] = _search_one(pat, t, flags=re.IGNORECASE)
+        out[k] = _search_one(pat, t, flags=re.IGNORECASE | re.MULTILINE)
 
-    # 件名からの管理番号補完
     if not out.get("管理番号") and subject_manageno:
         out["管理番号"] = subject_manageno
 
-    # 本文ブロックだけをスパン抽出（次のいずれかの既知ラベルまで）
     for k in multiline_labels:
-        span = _search_span_between(span_labels, k, t)
-        if span:
+        span = _search_span_between(multiline_labels, k, t)
+        if span:  # スパン抽出があれば優先（原文保持）
             out[k] = span
 
-    # ---- 仕上げのガード：行頭アンカーでクリーンに再取得（巻き込み防止）----
-    m = re.search(r"(?im)^\s*対応者\s*:\s*(.+)$", t)
-    if m:
-        out["対応者"] = m.group(1).strip()
-
-    m = re.search(r"(?im)^\s*通報者\s*:\s*(.+)$", t)
-    if m:
-        out["通報者"] = m.group(1).strip()
-
-    m = re.search(r"(?im)^\s*完了連絡先(?:1)?\s*:\s*(.+)$", t)
-    if m:
-        out["完了連絡先1"] = m.group(1).strip()
-
-    # 処置内容に紛れたメタ行を除去（安全弁）
-    if out.get("処置内容"):
-        out["処置内容"] = _strip_trailing_meta(out["処置内容"])
-
-    # 作業時間（分）
     dur = minutes_between(out.get("現着時刻"), out.get("完了時刻"))
     out["作業時間_分"] = str(dur) if dur is not None and dur >= 0 else None
-
     return out
-
 
 # ====== テンプレ書き込み ======
 def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) -> bytes:
@@ -451,10 +376,8 @@ def fill_template_xlsx(template_bytes: bytes, data: Dict[str, Optional[str]]) ->
 
     return out.getvalue()
 
-
 def _sanitize_filename(name: str) -> str:
     return re.sub(r'[\\/:*?"<>|]+', "_", name)
-
 
 def build_filename(data: Dict[str, Optional[str]]) -> str:
     base_day = _first_date_yyyymmdd(data.get("現着時刻"), data.get("完了時刻"), data.get("受信時刻"))
@@ -464,10 +387,8 @@ def build_filename(data: Dict[str, Optional[str]]) -> str:
         return f"緊急出動報告書_{manageno}_{bname}_{base_day}.xlsm"
     return f"緊急出動報告書_{manageno}_{base_day}.xlsm"
 
-
 # ====== Streamlit UI ======
 st.set_page_config(page_title=APP_TITLE, layout="centered")
-
 # タイトル非表示＋上部余白を最小化＋編集ツールバーCSS
 st.markdown(
     """
