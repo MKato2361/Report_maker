@@ -261,7 +261,22 @@ def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
     return kept
 
 
-# ====== 正規表現 抽出 ======
+# ====== ★ 新規：ラベル境界で必ず止める抽出（1行メール対応） ======
+def _search_bounded_value(key: str, text: str, label_map: Dict[str, str]) -> Optional[str]:
+    """
+    例: '対応者' を抽出する際、次の任意ラベル（完了連絡先1/送信者/…）の直前で必ず止める。
+    改行が無い1行メールでも混入しない。
+    """
+    cur = label_map[key]
+    others = [v for k, v in label_map.items() if k != key]
+    # 次に現れる他ラベル or 末尾 でストップ
+    boundary = "|".join([f"(?:{v})" for v in others]) if others else r"\Z"
+    pattern = rf"(?is){cur}\s*(.+?)(?=(?:{boundary})|\Z)"
+    m = re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
+    return m.group(1).strip() if m else None
+
+
+# ====== 正規表現 抽出（境界付きに置き換え） ======
 def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     t = normalize_text(raw_text)
 
@@ -269,69 +284,63 @@ def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
     subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
 
-    # 1行想定（行頭アンカーで厳密に）
-    single_line = {
-        "管理番号": r"(?im)^\s*管理番号\s*:\s*([A-Za-z0-9\-]+)\s*$",
-        "物件名": r"(?im)^\s*物件名\s*:\s*(.+)$",
-        "住所": r"(?im)^\s*住所\s*:\s*(.+)$",
-        "窓口会社": r"(?im)^\s*窓口\s*:\s*(.+)$",
-        "メーカー": r"(?im)^\s*メーカー\s*:\s*(.+)$",
-        "制御方式": r"(?im)^\s*制御方式\s*:\s*(.+)$",
-        "契約種別": r"(?im)^\s*契約種別\s*:\s*(.+)$",
-        "受信時刻": r"(?im)^\s*受信時刻\s*:\s*([0-9/\-:\s]+)$",
-        "現着時刻": r"(?im)^\s*現着時刻\s*:\s*([0-9/\-:\s]+)$",
-        "完了時刻": r"(?im)^\s*完了時刻\s*:\s*([0-9/\-:\s]+)$",
-        "通報者": r"(?im)^\s*通報者\s*:\s*(.+)$",
-        "対応者": r"(?im)^\s*対応者\s*:\s*(.+)$",
-        # 「完了連絡先1」「完了連絡先」どちらでもOK
-        "完了連絡先1": r"(?im)^\s*完了連絡先(?:1)?\s*:\s*(.+)$",
-        "送信者": r"(?im)^\s*送信者\s*:\s*(.+)$",
-        "受付番号": r"(?im)^\s*受付番号\s*:\s*([0-9]+)\s*$",
-        "受付URL": r"(?im)^\s*詳細はこちら\s*:\s*.*?(https?://\S+)\s*$",
-        "現着完了登録URL": r"(?im)^\s*現着・完了登録はこちら\s*:\s*(https?://\S+)\s*$",
-    }
-
-    # 複数行想定（本文ブロックのみをスパン抽出）
-    multiline_labels = {
+    # すべてのラベル（本文系も含め、次ラベルまでで止められるようにする）
+    labels_for_boundary = {
+        "管理番号": r"管理番号\s*:",
+        "物件名": r"物件名\s*:",
+        "住所": r"住所\s*:",
+        "窓口会社": r"窓口\s*:",
+        "メーカー": r"メーカー\s*:",
+        "制御方式": r"制御方式\s*:",
+        "契約種別": r"契約種別\s*:",
+        "受信時刻": r"受信時刻\s*:",
+        "現着時刻": r"現着時刻\s*:",
+        "完了時刻": r"完了時刻\s*:",
+        "通報者": r"通報者\s*:",
+        "対応者": r"対応者\s*:",
+        "完了連絡先1": r"完了連絡先(?:1)?\s*:",
+        "送信者": r"送信者\s*:",
+        "受付番号": r"受付番号\s*:",
+        "受付URL": r"詳細はこちら\s*:",
+        "現着完了登録URL": r"現着・完了登録はこちら\s*:",
+        # 本文ブロック
         "受信内容": r"受信内容\s*:",
         "現着状況": r"現着状況\s*:",
         "原因": r"原因\s*:",
         "処置内容": r"処置内容\s*:",
     }
 
-    out: Dict[str, Optional[str]] = {k: None for k in set(single_line.keys()) | set(multiline_labels.keys())}
+    # 初期化
+    out: Dict[str, Optional[str]] = {k: None for k in labels_for_boundary.keys()}
     out.update({
         "案件種別(件名)": subject_case,
-        "受付URL": None,
-        "現着完了登録URL": None,
     })
 
-    # 行単位でまず拾う
-    for k, pat in single_line.items():
-        out[k] = _search_one(pat, t, flags=re.IGNORECASE)
+    # まずは全キーを「次ラベル手前まで」で取得（1行メールでも安全）
+    for k in labels_for_boundary.keys():
+        chunk = _search_bounded_value(k, t, labels_for_boundary)
+        # URL系は中からURLだけ抜く
+        if k in ("受付URL", "現着完了登録URL") and chunk:
+            url = _search_one(r"(https?://\S+)", chunk, flags=re.IGNORECASE)
+            out[k] = url or chunk
+        else:
+            out[k] = chunk
 
-    # 件名からの管理番号補完
+    # 管理番号が未取得で、件名にあれば補完
     if not out.get("管理番号") and subject_manageno:
         out["管理番号"] = subject_manageno
 
-    # 本文ブロックだけをスパン抽出（次の本文ラベルまで）
+    # 行区切りのメールでは、本文ブロックはスパン抽出の方が自然なことがあるので上書き優先
+    multiline_labels = {
+        "受信内容": r"受信内容\s*:",
+        "現着状況": r"現着状況\s*:",
+        "原因": r"原因\s*:",
+        "処置内容": r"処置内容\s*:",
+    }
     for k in multiline_labels:
         span = _search_span_between(multiline_labels, k, t)
         if span:
             out[k] = span
-
-    # ---- 仕上げのガード：行頭アンカーでクリーンに再取得（巻き込み防止）----
-    m = re.search(r"(?im)^\s*対応者\s*:\s*(.+)$", t)
-    if m:
-        out["対応者"] = m.group(1).strip()
-
-    m = re.search(r"(?im)^\s*通報者\s*:\s*(.+)$", t)
-    if m:
-        out["通報者"] = m.group(1).strip()
-
-    m = re.search(r"(?im)^\s*完了連絡先(?:1)?\s*:\s*(.+)$", t)
-    if m:
-        out["完了連絡先1"] = m.group(1).strip()
 
     # 作業時間（分）
     dur = minutes_between(out.get("現着時刻"), out.get("完了時刻"))
