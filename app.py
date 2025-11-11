@@ -175,20 +175,12 @@ def normalize_text(text: str) -> str:
     if not text:
         return ""
     t = unicodedata.normalize("NFKC", text)
-    t = t.replace("：", ":")
+    t = t.replace("：", ":")  # ラベルコロンの統一
     t = t.replace("\t", " ").replace("\r\n", "\n").replace("\r", "\n")
     return t
 
 def _search_one(pattern: str, text: str, flags=0) -> Optional[str]:
     m = re.search(pattern, text, flags)
-    return m.group(1).strip() if m else None
-
-def _search_span_between(labels: Dict[str, str], key: str, text: str) -> Optional[str]:
-    lab = labels[key]
-    others = [v for k, v in labels.items() if k != key]
-    boundary = "|".join([f"(?:{v})" for v in others]) if others else r"$"
-    pattern = rf"{lab}\s*(.+?)(?=\n(?:{boundary})|\Z)"
-    m = re.search(pattern, text, flags=re.DOTALL | re.IGNORECASE)
     return m.group(1).strip() if m else None
 
 def _try_parse_datetime(s: Optional[str]) -> Optional[datetime]:
@@ -240,68 +232,110 @@ def _split_lines(text: Optional[str], max_lines: int = 5) -> List[str]:
     kept = lines[: max_lines - 1] + [lines[max_lines - 1] + "…"]
     return kept
 
-# ====== 正規表現 抽出 ======
+# ====== 改善版 抽出ロジック ======
+# ラベル候補（境界検出用。ここに載っている「次のラベル」出現でブロック終端と判定）
+_ALL_LABEL_TOKENS = [
+    "管理番号","物件名","住所","窓口","窓口会社","メーカー","制御方式","契約種別",
+    "受信時刻","受信内容","通報者","現着時刻","完了時刻",
+    "現着状況","原因","処置内容","対応者","完了連絡先1","送信者",
+    "詳細はこちら","現着・完了登録はこちら","受付番号"
+]
+_BOUNDARY_RE = "|".join([re.escape(tok) + r"\s*:" for tok in _ALL_LABEL_TOKENS])
+
+def _extract_block(label: str, text: str) -> Optional[str]:
+    """
+    行頭 ^{label}: から始まり、次のラベル行（空白行を挟んでもOK）直前までを取得。
+    """
+    lab = re.escape(label) + r"\s*:"
+    # (?m) = MULTILINE, (?s) = DOTALL
+    # 次のラベルは「行頭の空白* + ラベル:」で検出
+    pat = rf"(?ms)^\s*{lab}\s*(.*?)(?=^\s*(?:{_BOUNDARY_RE})|\Z)"
+    m = re.search(pat, text)
+    if not m:
+        return None
+    return m.group(1).strip()
+
+def _extract_single_line(label: str, text: str) -> Optional[str]:
+    """
+    行頭 ^{label}: の行の右辺（行末まで）を取得（単行想定）
+    """
+    lab = re.escape(label) + r"\s*:"
+    m = re.search(rf"(?m)^\s*{lab}\s*(.+)$", text)
+    return m.group(1).strip() if m else None
+
+def _extract_url_after_label(label: str, text: str) -> Optional[str]:
+    """
+    例：詳細はこちら: 説明文（改行）
+        https://example.com/xxx )  ← 末尾の括弧/記号は除去
+    """
+    lab = re.escape(label) + r"\s*:"
+    m = re.search(rf"(?ms)^\s*{lab}\s*(?:.*\n)?\s*(https?://\S+)", text)
+    if not m:
+        return None
+    url = m.group(1).strip()
+    # 閉じ括弧や全角括弧が末尾に付いている場合は落とす
+    url = re.sub(r"[)\]＞＞）」】>]+$", "", url)
+    return url
+
 def extract_fields(raw_text: str) -> Dict[str, Optional[str]]:
     t = normalize_text(raw_text)
 
-    # 件名由来の補助抽出
-    subject_case = _search_one(r"件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
+    # 件名由来（任意）
+    subject_case = _search_one(r"(?m)^件名:\s*【\s*([^】]+)\s*】", t, flags=re.IGNORECASE)
     subject_manageno = _search_one(r"件名:.*?【[^】]+】\s*([A-Z0-9\-]+)", t, flags=re.IGNORECASE)
 
-    # 1行想定
-    single_line = {
-        "管理番号": r"管理番号\s*:\s*([A-Za-z0-9\-]+)",
-        "物件名": r"物件名\s*:\s*(.+)",
-        "住所": r"住所\s*:\s*(.+)",
-        "窓口会社": r"窓口\s*:\s*(.+)",
-        "メーカー": r"メーカー\s*:\s*(.+)",
-        "制御方式": r"制御方式\s*:\s*(.+)",
-        "契約種別": r"契約種別\s*:\s*(.+)",
-        "受信時刻": r"受信時刻\s*:\s*([0-9/\-:\s]+)",
-        "通報者": r"通報者\s*:\s*(.+)",
-        "現着時刻": r"現着時刻\s*:\s*([0-9/\-:\s]+)",
-        "完了時刻": r"完了時刻\s*:\s*([0-9/\-:\s]+)",
-        "対応者": r"対応者\s*:\s*(.+)",
-        "送信者": r"送信者\s*:\s*(.+)",
-        "受付番号": r"受付番号\s*:\s*([0-9]+)",
-        "受付URL": r"詳細はこちら\s*:\s*.*?(https?://\S+)",
-        "現着完了登録URL": r"現着・完了登録はこちら\s*:\s*(https?://\S+)",
+    out_keys = {
+        # 表示・Excel書込みで使うキー
+        "管理番号","物件名","住所","窓口会社","メーカー","制御方式","契約種別",
+        "受信時刻","通報者","現着時刻","完了時刻",
+        "受信内容","現着状況","原因","処置内容",
+        "対応者","送信者","受付番号","受付URL","現着完了登録URL",
+        "作業時間_分","案件種別(件名)"
     }
+    out: Dict[str, Optional[str]] = {k: None for k in out_keys}
 
-    # 複数行想定（境界抽出）
-    multiline_labels = {
-        "受信内容": r"受信内容\s*:",
-        "現着状況": r"現着状況\s*:",
-        "原因": r"原因\s*:",
-        "処置内容": r"処置内容\s*:",
-        # 下記はフォーマット依存で複数行になりうるため残す
-        "通報者": r"通報者\s*:",
-        "対応者": r"対応者\s*:",
-        "送信者": r"送信者\s*:",
-        "現着時刻": r"現着時刻\s*:",
-        "完了時刻": r"完了時刻\s*:",
-    }
+    # --- 単行抽出（行頭固定）
+    out["管理番号"] = _extract_single_line("管理番号", t) or subject_manageno
+    out["物件名"] = _extract_single_line("物件名", t)
+    out["住所"] = _extract_single_line("住所", t)
 
-    out: Dict[str, Optional[str]] = {k: None for k in set(single_line.keys()) | set(multiline_labels.keys())}
-    out.update({
-        "案件種別(件名)": subject_case,
-        "受付URL": None,
-        "現着完了登録URL": None,
-    })
+    # 窓口 or 窓口会社 → 窓口会社に格納
+    win1 = _extract_single_line("窓口会社", t)
+    win2 = _extract_single_line("窓口", t)
+    out["窓口会社"] = win1 or win2
 
-    for k, pat in single_line.items():
-        out[k] = _search_one(pat, t, flags=re.IGNORECASE | re.MULTILINE)
+    out["メーカー"] = _extract_single_line("メーカー", t)
+    out["制御方式"] = _extract_single_line("制御方式", t)
+    out["契約種別"] = _extract_single_line("契約種別", t)
 
-    if not out.get("管理番号") and subject_manageno:
-        out["管理番号"] = subject_manageno
+    out["受信時刻"] = _extract_single_line("受信時刻", t)
+    out["通報者"] = _extract_single_line("通報者", t)
+    out["現着時刻"] = _extract_single_line("現着時刻", t)
+    out["完了時刻"] = _extract_single_line("完了時刻", t)
 
-    for k in multiline_labels:
-        span = _search_span_between(multiline_labels, k, t)
-        if span:  # スパン抽出があれば優先（原文保持）
-            out[k] = span
+    out["対応者"] = _extract_single_line("対応者", t)
+    out["送信者"] = _extract_single_line("送信者", t)
 
+    # 受付番号は「詳細はこちら」行の途中にあるケースを想定し、全文からも拾う
+    out["受付番号"] = _search_one(r"受付番号\s*:\s*([0-9]+)", t, flags=re.IGNORECASE | re.MULTILINE)
+
+    # --- 複数行ブロック（4項目のみを厳密に、他に波及しない）
+    out["受信内容"] = _extract_block("受信内容", t)
+    out["現着状況"] = _extract_block("現着状況", t)
+    out["原因"] = _extract_block("原因", t)
+    out["処置内容"] = _extract_block("処置内容", t)
+
+    # --- URL（改行・括弧込み対応）
+    out["受付URL"] = _extract_url_after_label("詳細はこちら", t)
+    out["現着完了登録URL"] = _extract_url_after_label("現着・完了登録はこちら", t)
+
+    # 件名カテゴリ
+    out["案件種別(件名)"] = subject_case
+
+    # 作業時間（分）
     dur = minutes_between(out.get("現着時刻"), out.get("完了時刻"))
     out["作業時間_分"] = str(dur) if dur is not None and dur >= 0 else None
+
     return out
 
 # ====== テンプレ書き込み ======
